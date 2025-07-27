@@ -29,7 +29,7 @@ These workflows are designed to be:
 
 ## 🛠️ More Coming Soon
 
-New workflows will be added regularly — covering different automation ideas, especially around AI, content generation, web scraping, and practical everyday tasks.
+New workflows will be added in future — covering different automation ideas, especially around AI, content generation, web developement, and practical everyday tasks.
 
 ---
 
