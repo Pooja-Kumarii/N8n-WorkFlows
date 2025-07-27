@@ -1,0 +1,176 @@
+{
+  "name": "News Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -432,
+        -80
+      ],
+      "id": "ff5dd763-fab6-47e0-8f9f-89648e28df07",
+      "name": "When chat message received",
+      "webhookId": "722df072-54f8-4172-83d4-cf95943cb5dd"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "“Give me only a short bullet list of top news headlines from today. In plain English. No code. No explanation.”"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.1,
+      "position": [
+        -80,
+        -80
+      ],
+      "id": "4488ecae-4474-4dc2-89d8-e6186ad444f3",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "mistralai/mistral-7b-instruct:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        96
+      ],
+      "id": "9291299b-aa40-4be1-9cee-5d1a08efd58a",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "G02RsRMey03JRdgR",
+          "name": "Newsletter"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -64,
+        160
+      ],
+      "id": "18e9876e-ef52-4415-b7e9-0f913d0f3e69",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/top-headlines?country=pk&language=en&apiKey=934c55a7938a4603a857c8740ce1d030",
+        "options": {},
+        "optimizeResponse": true,
+        "responseType": "text"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        144,
+        144
+      ],
+      "id": "970d59a9-1181-4d53-9da3-53f70b8e04b3",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "sendTo": "devjanipooja9@gmail.com",
+        "subject": "Current News",
+        "emailType": "text",
+        "message": "=📰 Pakistan's Today's News Highlights:\n\n{{ $json.articles.slice(0, 10).map((a, i) => `${i+1}. ${a.title} - ${a.url}`).join(\"\\n\") }} {{ $json.output }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        272,
+        -80
+      ],
+      "id": "84fc49c7-1a46-4530-a276-faba1937635f",
+      "name": "Send a message",
+      "webhookId": "751cd674-acdd-4f9c-973f-591afe543a86",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "cLdJIOHQRDF7zwGt",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "edfdcad5-9ef1-4b5d-a634-d42ed8b7a8f4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3442d5e08a0755ea15827e82c4b9382fcf2f815de5f2ae40ea143b4b90ddfecb"
+  },
+  "id": "0ig5OE6SCx7FjvSD",
+  "tags": []
+}
