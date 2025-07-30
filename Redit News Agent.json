@@ -1,0 +1,205 @@
+{
+  "name": "Redit News Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9
+            }
+          ]
+        }
+      },
+      "id": "c0016dbb-d005-4c11-85d8-8a5c65978a1b",
+      "name": "Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "title",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.selftext || 'No extra content available.' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ccd5cc44-83ac-4b18-932c-c380ef98c86a",
+      "name": "Set Values",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        96,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "subreddit": "ArtificialInteligence",
+        "limit": 1,
+        "filters": {
+          "category": "top"
+        }
+      },
+      "id": "f482cf1f-16cb-42ba-8aa0-74bd2cf2948c",
+      "name": "Get many posts",
+      "type": "n8n-nodes-base.reddit",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        304
+      ],
+      "credentials": {
+        "redditOAuth2Api": {
+          "id": "k0Zj9JZ50tdifSo1",
+          "name": "Reddit account api key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=First make heading of the article must be big and bold {{$json[\"title\"]}}\n\nWrite a dramatic and engaging paragraph (10-13 lines) in response to a tech or AI-related this {{$json[\"content\"]}}  topic.\n\nTone & Style Requirements:\n\nStart with a bold, dramatic hook to instantly grab the reader’s attention.\n\nSummarize the key issue or trend clearly.\n\nMention relevant context (e.g. trust issues, recent incidents like Replit, client fears, shift from hype to value).\n\nEmphasize that real-world impact matters more than flashy ideas.\n\nEnd with a thought-provoking or bold statement that invites discussion.\nand also add redit that page url: {{$json[\"url\"]}} make sure to add url after the content summarization and before finshing line\n\nFinish with this exact CTA:\n📌 Want more daily tech facts like this in your feed? Then simply follow me.\n\nWrite in a natural, passionate voice that feels human and opinionated — not robotic.\n\nExample Output:\nThe AI gold rush is slowing down — and many founders are waking up to a hard truth: clients don’t care about buzzwords, they care about results. One AI founder is ditching agents and returning to old, proven services — not because the tech failed, but because the trust is fading. Incidents like the Replit hacker tool only deepened the fear. This isn’t just one case — many startups chased hype over value, and now they’re feeling the crash. Clients no longer want flashy tools that overpromise and underdeliver. Founders must stop talking in circles and start solving real problems. The AI market is changing fast — don’t blink.\n\n📌 Want more daily tech facts like this in your feed? Then simply follow me.\n\nNow, generate a similar paragraph based on the topic I give you. and please make sure use simple wordinf so eveyone can unndetstand it",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.1,
+      "position": [
+        320,
+        304
+      ],
+      "id": "81fef52f-ff8e-427c-9a72-172766dd329e",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "mistralai/mistral-small-3.2-24b-instruct:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        416,
+        528
+      ],
+      "id": "5c9a9899-0624-495b-aec0-8108ef88df6b",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "DBWAAWEx9aIicHWe",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "devjanipooja9@gmail.com",
+        "subject": "Redit News",
+        "emailType": "text",
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        720,
+        304
+      ],
+      "id": "acd93e11-97d4-45e2-a58e-244f1487857e",
+      "name": "Send a message",
+      "webhookId": "4482f010-8a39-4058-8aab-1c221c3adf80",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ryqolChuaXf7KOlV",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cron": {
+      "main": [
+        [
+          {
+            "node": "Get many posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many posts": {
+      "main": [
+        [
+          {
+            "node": "Set Values",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Values": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e5e3a65e-f534-409f-ab7e-8999429a4257",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5586ee835f7f80f77274d48445f8c68d5af9d78da559bf07dea6607780219fde"
+  },
+  "id": "TUYM3xBQKBe0A4TR",
+  "tags": []
+}
