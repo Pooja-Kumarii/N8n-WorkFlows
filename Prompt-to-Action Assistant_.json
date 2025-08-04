@@ -1,0 +1,724 @@
+{
+  "name": "Prompt-to-Action Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "=# Overview\nYou are the user's personal AI assistant. Your role is to handle requests by using the correct tool. You don\u2019t write content or perform tasks directly \u2014 your only job is to call the right agent for the job.\n\n## Tools\n- **Think**: Use this to reflect, double-check your reasoning, or if you're unsure what to do.\n- **emailAgent**: Use this to send or draft emails.\n- **calendarAgent**: Use this to create or update calendar events.\n- **webAgent**: Use this for deep web research, current information, or anything that requires browsing.\n\n## Rules\n- Some actions require looking up contact details first. For the following tasks, you must first ensure the required contact info (like an email address) is available:\n  - sending emails\n  - drafting emails\n  - creating calendar events with attendees\n\n## Instructions\n1) Figure out what the user wants to do.\n2) Use the correct agent to complete the task.\n3) Always call **Think** after the task to confirm it was handled properly.\n\n## Examples\n1)  \n- Input: send an email to Pooja Kumari asking what time he wants to meet  \n  - Action: Use **emailAgent** with a query like:  \n    \"Send Pooja Kumari an email asking what time he wants to meet. His email is: [email address]\"  \n  - Action: Use **Think** to review the steps taken\n\n- Output: The email has been sent to Pooja Kumari. Anything else I can help with?\n\n2)  \n- Input: Schedule a meeting with John at 1pm next Friday  \n  - Action: Use **calendarAgent** with input like:  \n    \"Schedule a meeting with John at 1pm on [next Friday's date]. His email is: [email address]\"  \n  - Action: Use **Think** to confirm the event was created correctly\n\n## Final Reminders\nHere is the current date/time: {{ $now }}",
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.1,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "acd230ca-24f2-43cb-b420-101159bf5d96",
+      "name": "AI Agent",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $fromAI(\"emailAddress\") }}",
+        "subject": "={{ $fromAI(\"subject\") }}",
+        "message": "={{ $fromAI(\"emailBody\") }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [
+        1216,
+        560
+      ],
+      "id": "6a05d2df-974f-4d01-8229-90d5d5545fbb",
+      "name": "Send Email",
+      "webhookId": "86c8c4b1-13bb-4ebe-acb9-30e1d7082d55",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ryqolChuaXf7KOlV",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": "={{ $fromAI(\"limit\",\"how many emails the user wants\") }}",
+        "simple": false,
+        "filters": {
+          "sender": "={{ $fromAI(\"sender\",\"who the emails are from\") }}"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        560
+      ],
+      "id": "b5d3cbdf-7a20-40a6-a571-0d7e239cffc5",
+      "name": "Get Emails",
+      "webhookId": "af4b3298-9037-44b0-aa12-2acbfbb5e66f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ryqolChuaXf7KOlV",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{ $fromAI(\"subject\") }}",
+        "emailType": "html",
+        "message": "={{ $fromAI(\"emailBody\") }}",
+        "options": {
+          "threadId": "={{ $fromAI(\"threadID\") }}",
+          "sendTo": "={{ $fromAI(\"emailAddress\") }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [
+        1216,
+        416
+      ],
+      "id": "748036a7-98f4-4359-9283-5e2138eb52b6",
+      "name": "Create Draft",
+      "webhookId": "17016bce-d7d7-428a-a56c-f6ea122db8be",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ryqolChuaXf7KOlV",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $fromAI(\"ID\",\"the message ID\") }}",
+        "message": "={{ $fromAI(\"emailBody\") }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        416
+      ],
+      "id": "505a34cc-0189-4195-b2d4-77ba16103a99",
+      "name": "Email Reply",
+      "webhookId": "114785e6-a859-432b-81b4-c490c1c35b1c",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ryqolChuaXf7KOlV",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "label",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        560
+      ],
+      "id": "8c213650-eeda-45a4-95e4-bac6bc39128e",
+      "name": "Get Labels",
+      "webhookId": "9e08b59e-792d-4566-83f1-9263c9ad86ae",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ryqolChuaXf7KOlV",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $fromAI(\"ID\",\"the ID of the message\") }}",
+        "labelIds": "={{ $fromAI(\"labelID\") }}"
+      },
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [
+        1088,
+        416
+      ],
+      "id": "d5e66d27-4f4a-4a34-b0de-2b20c2a8f71f",
+      "name": "Label Emails",
+      "webhookId": "0e951529-2e6d-40bf-ac40-fc0947e242e2",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ryqolChuaXf7KOlV",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "markAsUnread",
+        "messageId": "={{ $fromAI(\"messageID\") }}"
+      },
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [
+        1088,
+        560
+      ],
+      "id": "b888fd6e-3a2d-46b1-a8c3-65e9bea34489",
+      "name": "Mark Unread",
+      "webhookId": "a35af9d8-f67d-4ff9-803f-59ec6356e795",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ryqolChuaXf7KOlV",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "An email agent for all email actions",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "=# Overview\nYou are an email management assistant. All emails must be formatted professionally in HTML and signed off as **\"Pooja Kumari.\"**\n\n## Email Management Tools  \n- **Send Email** \u2013 Use this to send a new email.  \n- **Create Draft** \u2013 Use this if the user requests a draft instead of sending.  \n- **Get Emails** \u2013 Use this to retrieve the user's emails when requested.  \n- **Get Labels** \u2013 Use this to retrieve the available email labels.  \n- **Mark Unread** \u2013 Use this to mark an email as unread.  \n  - First, use **Get Emails** to retrieve the email and get its message ID.  \n- **Label Email** \u2013 Use this to apply a label to an email.  \n  - First, use **Get Emails** to get the message ID.  \n  - Then, use **Get Labels** to find the label ID.  \n- **Email Reply** \u2013 Use this to reply to an existing email.  \n  - First, use **Get Emails** to retrieve the original message and get its message ID.\n\n## Final Notes\nHere is the current date/time: {{ $now }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        1024,
+        240
+      ],
+      "id": "ae351640-6f64-4883-9531-c6612eeccd05",
+      "name": "Email Agent"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "devjanipooja9@gmail.com",
+          "mode": "list",
+          "cachedResultName": "devjanipooja9@gmail.com"
+        },
+        "start": "={{ $fromAI(\"eventStart\") }}",
+        "end": "={{ $fromAI(\"eventEnd\") }}",
+        "additionalFields": {
+          "attendees": [
+            "={{ $fromAI(\"eventAttendeeEmail\") }}"
+          ],
+          "summary": "={{ $fromAI(\"eventTitle\") }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1616,
+        560
+      ],
+      "id": "00dfaebc-7d5c-4f03-8e03-df39f2e6427b",
+      "name": "Create Event with Attendee",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "MW77wCxVTDbWvzz4",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "devjanipooja9@gmail.com",
+          "mode": "list",
+          "cachedResultName": "devjanipooja9@gmail.com"
+        },
+        "start": "={{ $fromAI(\"eventStart\") }}",
+        "end": "={{ $fromAI(\"eventEnd\") }}",
+        "additionalFields": {
+          "attendees": [],
+          "summary": "={{ $fromAI(\"eventTitle\") }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1360,
+        560
+      ],
+      "id": "4f7d9814-316b-45f7-980b-4e64310a7894",
+      "name": "Create Event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "MW77wCxVTDbWvzz4",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "devjanipooja9@gmail.com",
+          "mode": "list",
+          "cachedResultName": "devjanipooja9@gmail.com"
+        },
+        "timeMin": "={{ $fromAI(\"dayBefore\",\"the day before the date the user requested\") }}",
+        "timeMax": "={{ $fromAI(\"dayAfter\",\"the day after the date the user requested\") }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1616,
+        416
+      ],
+      "id": "00d60b9f-b9b1-488c-a3d5-e1813d17dbd9",
+      "name": "Get Events",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "MW77wCxVTDbWvzz4",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "value": "devjanipooja9@gmail.com",
+          "mode": "list",
+          "cachedResultName": "devjanipooja9@gmail.com"
+        },
+        "eventId": "={{ $fromAI(\"eventID\") }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1488,
+        416
+      ],
+      "id": "d84dff85-19cb-44b4-b3f6-a58d25ecf392",
+      "name": "Delete Event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "MW77wCxVTDbWvzz4",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "value": "devjanipooja9@gmail.com",
+          "mode": "list",
+          "cachedResultName": "devjanipooja9@gmail.com"
+        },
+        "eventId": "={{ $fromAI(\"eventID\") }}",
+        "updateFields": {
+          "end": "={{ $fromAI(\"endTime\") }}",
+          "start": "={{ $fromAI(\"startTime\") }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1488,
+        560
+      ],
+      "id": "c1e35615-697b-4b40-81a8-0322ce9676d6",
+      "name": "Update Event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "MW77wCxVTDbWvzz4",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "A calendar agent for all calendar actions",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "=# Overview\nYou are a calendar assistant. Your responsibilities include creating, getting, and deleting events in the user's calendar.\n\n**Calendar Management Tools**  \n   - Use \"Create Event with Attendee\" when an event includes a participant.  \n   - Use \"Create Event\" for solo events.   \n   - Use \"Get Events\" to fetch calendar schedules when requested.\n   - Use \"Delete Event\" to delete an event. You must use \"Get Events\" first to get the ID of the event to delete.\n   - Use \"Update Event\" to update an event. You must use \"Get Events\" first to get the ID of the event to update.\n\n## Final Notes\nHere is the current date/time: {{ $now }}\nIf a duration for an event isn't specified, assume it will be one hour."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        1376,
+        240
+      ],
+      "id": "993f403b-2642-4fcc-80ef-032ddbb89e2d",
+      "name": "Calendar Agent"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1,
+      "position": [
+        752,
+        240
+      ],
+      "id": "af944ef9-d5db-428d-885b-2a0dfe2fc214",
+      "name": "Think"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.sessionId }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        240
+      ],
+      "id": "fabad60a-df00-45fc-9b0d-a28f98668034",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        1008,
+        0
+      ],
+      "id": "dd7d282d-5b24-4c32-9c4e-91e0c72886b3",
+      "name": "Chat With AI",
+      "webhookId": "26006e32-bfd1-4f34-ad41-a7fd97a06157"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        656,
+        128
+      ],
+      "id": "83519c9b-116c-490c-8e8c-ce21cb4ae214",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "u5hWBFV3PU4NQoR6",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        784,
+        416
+      ],
+      "id": "5781c787-0d71-459a-a634-83ec0dc55a28",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "u5hWBFV3PU4NQoR6",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1328,
+        416
+      ],
+      "id": "65083ee9-d2e7-4c48-9aaf-f34ed2a3c78c",
+      "name": "OpenAI Chat Model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "u5hWBFV3PU4NQoR6",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Send Email": {
+      "ai_tool": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Emails": {
+      "ai_tool": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Draft": {
+      "ai_tool": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Reply": {
+      "ai_tool": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Labels": {
+      "ai_tool": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Emails": {
+      "ai_tool": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Unread": {
+      "ai_tool": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Event with Attendee": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Event": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Events": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Event": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Event": {
+      "ai_tool": [
+        [
+          {
+            "node": "Calendar Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Agent": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat With AI": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Email Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Calendar Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b079f0ae-02fe-4388-bc13-01bfcf065353",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5586ee835f7f80f77274d48445f8c68d5af9d78da559bf07dea6607780219fde"
+  },
+  "id": "CQO2lKoBkxgLkWKD",
+  "tags": [
+    {
+      "name": "Pooja Devjani",
+      "id": "K2NNjzEkxRg2yDcU",
+      "createdAt": "2025-08-04T12:40:53.435Z",
+      "updatedAt": "2025-08-04T12:40:53.435Z"
+    }
+  ]
+}
