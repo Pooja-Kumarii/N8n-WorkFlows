@@ -16,6 +16,7 @@ Each workflow is provided as an importable `.json` file. Download the file and i
 - [What is n8n?](#what-is-n8n)
 - [Prerequisites](#prerequisites)
 - [Workflows Included](#workflows-included)
+- [Workflow Screenshots](#workflow-screenshots)
 - [Architecture Overview](#architecture-overview)
 - [How to Use a Workflow](#how-to-use-a-workflow)
 - [Tech and Concepts Used](#tech-and-concepts-used)
@@ -78,29 +79,27 @@ Canvas view of each workflow as built in n8n.
 
 **Agentic Email Triage & Draft Reply**
 
-![Agentic Email Triage & Draft Reply](/images/Task6.png)
+![Agentic Email Triage & Draft Reply](images/Task6.png)
 
 **Automated Contract Risk Extraction**
 
-![Automated Contract Risk Extraction](/images/Task7.png)
+![Automated Contract Risk Extraction](images/Task7.png)
 
 **AI-Driven Customer Feedback Analysis and Response Automation**
 
-![AI-Driven Customer Feedback Analysis and Response Automation](/images/Task4.png)
+![AI-Driven Customer Feedback Analysis and Response Automation](images/Task4.png)
 
 **AI Competitor Analysis and Trend Monitoring**
 
-![AI Competitor Analysis and Trend Monitoring](/images/Task5.png)
+![AI Competitor Analysis and Trend Monitoring](images/Task5.png)
 
 **Lead Scoring Workflow**
 
-![Lead Scoring Workflow](/images/Task1.png)
+![Lead Scoring Workflow](images/Task1.png)
 
 **AI Customer Support Ticket Classifier**
 
-![AI Customer Support Ticket Classifier](/images/Task.png)
-
-> Placeholder: screenshots for `AI Content Curation and Social Posting Pipeline`, `Final Rag Agent`, `Rag Agent Part 1`, `News Agent`, `Redit News Agent`, and `Prompt-to-Action Assistant` can be added the same way: `docs/screenshots/<workflow-name>.png`
+![AI Customer Support Ticket Classifier](images/Task.png)
 
 ---
 
@@ -132,8 +131,6 @@ flowchart LR
     D --> F[Generate Strategic Recommendation]
     F --> G[Slack Notification: Summary + Impact + Source]
 ```
-
-> Placeholder: additional diagrams for remaining workflows can be added following the same pattern.
 
 ---
 
