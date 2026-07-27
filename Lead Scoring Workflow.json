@@ -1,0 +1,532 @@
+{
+  "updatedAt": "2026-07-11T05:55:37.160Z",
+  "createdAt": "2026-06-11T05:14:55.100Z",
+  "id": "X7KOB6RwUI6FZeTh",
+  "name": "Lead Scoring Workflow",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-scoring",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "959bf1a8-d142-4e54-9fb2-6510c0414e08",
+      "name": "Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2192,
+        256
+      ],
+      "webhookId": "4e26b926-4537-47af-867f-6360b6bf07c5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"meta-llama/llama-3.1-8b-instruct\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a strict lead qualification expert.\\n\\nSCORING RULES (1-10):\\n- Budget mentioned (50k+): +3 points\\n- Decision maker (CEO/Manager/Head): +3 points\\n- Fit keywords (automation/scale/enterprise/urgent): +2 points\\n- Clear problem statement (specific use case): +2 points\\n\\nEDGE CASES — Score 1 if:\\n- Message is gibberish or random characters\\n- Message is too vague (less than 10 words)\\n- No company or role mentioned at all\\n- Looks like spam or test message\\n\\nRespond ONLY in this exact JSON format, nothing else:\\n{\\\"score\\\": <1-10>, \\\"reasoning\\\": \\\"<one sentence max>\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Score this lead:\\\\nName: ' + $('Webhook1').item.json.body.name + '\\\\nCompany: ' + $('Webhook1').item.json.body.company + '\\\\nMessage: ' + $('Webhook1').item.json.body.message }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "0abf5637-0bd1-472e-9d13-93c277a50589",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1952,
+        256
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "LcWp0yDSkJrKEEP0",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.choices[0].message.content }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e89ce2b0-a313-4ca1-8962-834f2a29cbda",
+      "name": "IF - Response Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1712,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"error\", \"message\": \"AI did not return a valid response. Please try again.\" }",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "cf4db782-58b1-4564-8be0-ee229465d869",
+      "name": "Respond to Webhook - Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1472,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field1",
+              "name": "lead_name",
+              "value": "={{ $('Webhook1').item.json.body.name }}",
+              "type": "string"
+            },
+            {
+              "id": "field2",
+              "name": "lead_company",
+              "value": "={{ $('Webhook1').item.json.body.company }}",
+              "type": "string"
+            },
+            {
+              "id": "field3",
+              "name": "lead_message",
+              "value": "={{ $('Webhook1').item.json.body.message }}",
+              "type": "string"
+            },
+            {
+              "id": "field4",
+              "name": "score",
+              "value": "={{ JSON.parse($json.choices[0].message.content).score }}",
+              "type": "number"
+            },
+            {
+              "id": "field5",
+              "name": "reasoning",
+              "value": "={{ JSON.parse($json.choices[0].message.content).reasoning }}",
+              "type": "string"
+            },
+            {
+              "id": "field6",
+              "name": "scored_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "926f544a-b947-4584-aa1d-82ba29b8a092",
+      "name": "Set Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1472,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c8d4155d-383d-4a30-8483-22d99539083e",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": 8,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "30a93f85-6243-4c99-a1bc-7fe74f9c3788",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1216,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a80027d9",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "5333f927",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": 8,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "42267624-aa31-4b24-938e-d8d3219e9ead",
+      "name": "If1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -992,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "devjanipooja9@gmail.com",
+        "subject": "=🔥STRONG LEAD - {{$json.lead_name}}",
+        "message": "=<h2>🔥 STRONG LEAD</h2><p><b>Name:</b> {{$json.lead_name}}</p><p><b>Company:</b> {{$json.lead_company}}</p><p><b>Score:</b> {{$json.score}}/10</p><p><b>Reasoning:</b> {{$json.reasoning}}</p><p><b>Message:</b> {{$json.lead_message}}</p>",
+        "options": {}
+      },
+      "id": "50118d50-4c0d-48a9-a8f4-d66b3b654030",
+      "name": "Strong Lead",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -752,
+        80
+      ],
+      "webhookId": "d7512413-de1e-440b-9784-ba84ecd6b223",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pQxozntFIHHUefwF",
+          "name": "Gmail account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "sendTo": "devjanipooja9@gmail.com",
+        "subject": "=🟡MAYBE LEAD - {{$json.lead_name}}",
+        "message": "=<h2>MAYBE LEAD</h2><p><b>Name:</b> {{$json.lead_name}}</p><p><b>Company:</b> {{$json.lead_company}}</p><p><b>Score:</b> {{$json.score}}/10</p><p><b>Reasoning:</b> {{$json.reasoning}}</p><p><b>Message:</b> {{$json.lead_message}}</p>",
+        "options": {}
+      },
+      "id": "ff9ca063-dbd9-45e6-a7d2-80c1ab22883b",
+      "name": "Maybe Lead",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -736,
+        240
+      ],
+      "webhookId": "3e9db083-4dbd-4b9c-8a81-223f650a6d36",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pQxozntFIHHUefwF",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "devjanipooja9@gmail.com",
+        "subject": "=⚪WEAK LEAD - {{$json.lead_name}}",
+        "message": "=<h2>WEAK LEAD</h2><p><b>Name:</b> {{$json.lead_name}}</p><p><b>Company:</b> {{$json.lead_company}}</p><p><b>Score:</b> {{$json.score}}/10</p><p><b>Reasoning:</b> {{$json.reasoning}}</p><p><b>Message:</b> {{$json.lead_message}}</p>",
+        "options": {}
+      },
+      "id": "744b7330-dffe-40fd-b2ed-39fa3f1273d4",
+      "name": "Weak Lead",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -736,
+        432
+      ],
+      "webhookId": "fd563338-864c-4f2d-afa4-2a89f458ddc5",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pQxozntFIHHUefwF",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', lead: $json.lead_name, score: $json.score, reasoning: $json.reasoning }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "0ff144b6-29a1-4ad9-89bd-e2bd1bfca877",
+      "name": "Respond - Strong Lead",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -496,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', lead: $json.lead_name, score: $json.score, reasoning: $json.reasoning }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "a069c7c2-9d5e-4116-b5f7-932495331ab6",
+      "name": "Respond - Maybe Lead",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -496,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', lead: $json.lead_name, score: $json.score, reasoning: $json.reasoning }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "0de9ab92-708e-4027-bd71-e974dc021b3c",
+      "name": "Respond - Weak Lead",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -496,
+        432
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "IF - Response Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Response Valid?": {
+      "main": [
+        [
+          {
+            "node": "Set Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook - Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Fields": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Strong Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Maybe Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Weak Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strong Lead": {
+      "main": [
+        [
+          {
+            "node": "Respond - Strong Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Maybe Lead": {
+      "main": [
+        [
+          {
+            "node": "Respond - Maybe Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weak Lead": {
+      "main": [
+        [
+          {
+            "node": "Respond - Weak Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "dff78dfd-f3c9-45ca-a624-9ae49b6f582e",
+  "activeVersionId": null,
+  "versionCounter": 175,
+  "triggerCount": 1,
+  "tags": [
+    {
+      "updatedAt": "2026-06-11T17:02:51.931Z",
+      "createdAt": "2026-06-11T17:02:51.931Z",
+      "id": "5v5UUhf5EH0y87uE",
+      "name": "Pooja Kumari"
+    }
+  ],
+  "shared": [
+    {
+      "updatedAt": "2026-06-11T05:14:55.106Z",
+      "createdAt": "2026-06-11T05:14:55.106Z",
+      "role": "workflow:owner",
+      "workflowId": "X7KOB6RwUI6FZeTh",
+      "projectId": "zX0WzwZW2Dy2oOUW",
+      "project": {
+        "updatedAt": "2026-06-06T23:06:25.183Z",
+        "createdAt": "2026-06-06T22:59:00.083Z",
+        "id": "zX0WzwZW2Dy2oOUW",
+        "name": "Pooja Kumari <pujalohana1@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "4eb80c49-68d8-4de6-9345-3e101940fd5a"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

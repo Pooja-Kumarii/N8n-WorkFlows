@@ -1,0 +1,654 @@
+{
+  "updatedAt": "2026-07-18T23:55:30.578Z",
+  "createdAt": "2026-07-08T22:41:20.609Z",
+  "id": "orGHEl41e2h0vagT",
+  "name": "AI Competitor Analysis and Trend Monitoring Workflow",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": { "pollTimes": { "item": [{ "mode": "everyHour" }] }, "feedUrl": "https://yesitlabs.com/feed" },
+      "id": "3c44f685-477b-47c0-aa1e-b34aa634ef6a",
+      "name": "Competitor RSS Feed Trigger - YesITLabs",
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [7888, 1424]
+    },
+    {
+      "parameters": { "pollTimes": { "item": [{ "mode": "everyHour" }] }, "feedUrl": "https://flexsin.com/blog/feed" },
+      "id": "8c0af8cf-1d0a-426d-8508-d9faf1e00c4d",
+      "name": "Competitor RSS Feed Trigger - Flexsin",
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [7888, 1584]
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "competitor-update-intake", "options": {} },
+      "id": "ca2fffac-7ac9-437b-92fc-ffb7a22965cb",
+      "name": "Social Media & Press Release Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [7888, 1744],
+      "webhookId": "52d36a78-dc96-4597-9a55-6c3c86ce14a9"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json;\nconst isWebhook = raw.body !== undefined || raw.headers !== undefined;\n\nlet normalized;\nif (isWebhook) {\n  const body = raw.body || raw;\n  normalized = {\n    source_type: body.source_type || 'social_media',\n    competitor_name: body.competitor_name || 'Unknown Competitor',\n    title: body.title || 'Untitled Update',\n    link: body.link || body.url || '',\n    content_snippet: body.content || body.text || '',\n    published_date: body.published_date || new Date().toISOString()\n  };\n} else {\n  let competitorName = 'Unknown Competitor';\n  try {\n    competitorName = new URL(raw.link).hostname.replace('www.', '');\n  } catch (e) {\n    competitorName = raw.creator || 'Unknown Competitor';\n  }\n  normalized = {\n    source_type: 'rss',\n    competitor_name: competitorName,\n    title: raw.title || '',\n    link: raw.link || '',\n    content_snippet: raw.contentSnippet || raw.content || raw.summary || '',\n    published_date: raw.isoDate || raw.pubDate || new Date().toISOString()\n  };\n}\n\nnormalized.retryCount = 0;\nnormalized.retryCountAi = 0;\n\nconsole.log(`[LOG] Ingestion received | Source: ${normalized.source_type} | Competitor: ${normalized.competitor_name} | Title: ${normalized.title} | Timestamp: ${new Date().toISOString()}`);\n\nreturn { json: normalized };"
+      },
+      "id": "02c94c9d-0a3b-410d-a1c0-4adb9693ee60",
+      "name": "Normalize Update Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8128, 1584]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [
+            {
+              "leftValue": "={{ Boolean($json.link) && /^https?:\\/\\//.test($json.link) && Boolean($json.title) }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1b59963-a1d7-49a6-8e26-c3c23fc9f1ff",
+      "name": "Validate Update Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [8368, 1584]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.link }}",
+        "options": { "response": { "response": { "responseFormat": "text" } }, "timeout": 15000 }
+      },
+      "id": "457c5612-fe6d-4200-853e-5d9765d9f845",
+      "name": "Scrape Competitor Source Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [8608, 1504],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [
+            {
+              "leftValue": "={{ (() => { try { return $('Increment Retry Count - Scrape').item.json.retryCount || 0; } catch(e) { return 0; } })() }}",
+              "rightValue": 3,
+              "operator": { "type": "number", "operation": "lt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "461142d8-edf0-428c-8dc1-70a49919a2d0",
+      "name": "Check Scrape Retry Limit",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [8608, 1728]
+    },
+    {
+      "parameters": {
+        "jsCode": "let priorCount = 0;\ntry {\n  priorCount = $('Increment Retry Count - Scrape').item.json.retryCount || 0;\n} catch (e) {\n  priorCount = 0;\n}\nconst retryCount = priorCount + 1;\nconst original = $('Validate Update Data').item.json;\nconsole.log(`[LOG] Retry attempt ${retryCount} of 3 for scraping | URL: ${original.link}`);\nreturn { json: { ...original, retryCount } };"
+      },
+      "id": "856d1bb9-b9e9-4aee-843b-4c76e311b6e8",
+      "name": "Increment Retry Count - Scrape",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8832, 1664]
+    },
+    {
+      "parameters": { "amount": "={{ 5 * Math.pow(2, ($json.retryCount || 1) - 1) }}" },
+      "id": "4279c08d-bf70-444e-a58b-493e1e39da6d",
+      "name": "Exponential Backoff Wait - Scrape",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [9056, 1664],
+      "webhookId": "81f2fc06-67b5-462b-affe-cd19dc2fdfef"
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log(`[LOG] Retry exhausted for scraping after 3 attempts | URL: ${$json.link} | Falling back to RSS/webhook snippet content`);\nreturn {\n  json: {\n    ...$json,\n    content: $json.content_snippet,\n    scrape_status: 'fallback_snippet'\n  }\n};"
+      },
+      "id": "a65766a5-e587-48e8-9b32-59225196c697",
+      "name": "Fallback - Use Snippet Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8832, 1824]
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log(`[LOG] Scrape successful | URL: ${$json.link}`);\n\nconst raw = $json.data || $json.content_snippet || '';\nconst cleanText = raw\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 6000);\n\nreturn {\n  json: {\n    ...$json,\n    content: cleanText,\n    scrape_status: 'success'\n  }\n};"
+      },
+      "id": "963588d4-cebf-4c8e-af56-dc2a235179f2",
+      "name": "Finalize Scraped Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8832, 1424]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [
+            { "leftValue": "={{ ($json.content || '').length }}", "rightValue": 50, "operator": { "type": "number", "operation": "lt" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b79ec497-8092-4d2e-932d-40ffb079800c",
+      "name": "Check Content Sufficiency",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [9296, 1568]
+    },
+    {
+      "parameters": {
+        "jsCode": "const reason = $json.scrape_status\n  ? 'Insufficient content after scrape and fallback'\n  : 'Missing or invalid required fields (link/title) before scraping';\nconsole.log(`[LOG] Final status: SKIPPED | Reason: ${reason} | Competitor: ${$json.competitor_name} | Link: ${$json.link}`);\nreturn $input.all();"
+      },
+      "id": "7d8308b3-9085-4d1f-94b7-b92ea7a9f720",
+      "name": "Log & End - Skipped",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9520, 1360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"BAAI/bge-m3\", input: $json.competitor_name + ': ' + $json.title + '. ' + $json.content }) }}",
+        "options": {}
+      },
+      "id": "693cc8c3-a12b-4b6c-9f04-9b3f1211adcb",
+      "name": "Generate Embedding - OpenRouter (bge-m3)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [9520, 1600],
+      "credentials": {
+        "httpHeaderAuth": { "id": "YOUR_OPENROUTER_HEADER_AUTH_CREDENTIAL_ID", "name": "OpenRouter API Key (Header Auth)" },
+        "openRouterApi": { "id": "YOUR_OPENROUTER_CREDENTIAL_ID", "name": "OpenRouter account" }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PINECONE-INDEX-HOST.svc.YOUR-ENVIRONMENT.pinecone.io/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vector: $json.data[0].embedding, topK: 3, includeMetadata: true, filter: { competitor_name: { $eq: $('Check Content Sufficiency').item.json.competitor_name } } }) }}",
+        "options": {}
+      },
+      "id": "67967b73-22f9-4901-9d7b-fcf9ad242306",
+      "name": "Query Similar Past Insights - Pinecone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [9728, 1520],
+      "credentials": { "pineconeApi": { "id": "YOUR_PINECONE_CREDENTIAL_ID", "name": "Pinecone account" } },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Check Content Sufficiency').item.json;\nlet embeddingVector = null;\n\ntry {\n  const embedItem = $('Generate Embedding - OpenRouter (bge-m3)').item.json;\n  \n  if (embedItem?.data?.[0]?.embedding) {\n    embeddingVector = embedItem.data[0].embedding;\n  } else if (embedItem?.embedding) {\n    embeddingVector = embedItem.embedding;\n  } else if (Array.isArray(embedItem?.data) && embedItem.data.length > 0) {\n    embeddingVector = embedItem.data[0].embedding || embedItem.data[0] || null;\n  }\n  \n  if (!Array.isArray(embeddingVector) || embeddingVector.length === 0) {\n    embeddingVector = null;\n  }\n  \n} catch (e) {\n  console.error(`[LOG] Embedding extraction error: ${e.message}`);\n  embeddingVector = null;\n}\n\nif (!embeddingVector) {\n  console.log(`[LOG] Embedding generation failed | Competitor: ${original.competitor_name} | Skipping vector storage`);\n}\n\nlet historicalContext = 'No historical context available for this competitor yet.';\nconst queryResult = $json;\nif (queryResult && Array.isArray(queryResult.matches) && queryResult.matches.length > 0) {\n  const lines = queryResult.matches.map(m => {\n    const meta = m.metadata || {};\n    return `- [${meta.impact_level || 'Unknown'} impact | ${meta.category || 'Unknown'}] ${meta.published_date || 'n/a'}: ${(meta.summary || '').slice(0, 200)}`;\n  });\n  historicalContext = `Related past updates from this competitor:\\n${lines.join('\\n')}`;\n}\n\nreturn {\n  json: {\n    ...original,\n    embedding_vector: embeddingVector,\n    historical_context: historicalContext\n  }\n};"
+      },
+      "id": "99356ebc-a77f-4268-8f3a-ab5573214803",
+      "name": "Format Historical Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9952, 1600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "HTTP-Referer", "value": "https://your-project-domain.example.com" },
+            { "name": "X-Title", "value": "Competitor Analysis Workflow" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"openrouter/free\",\n  response_format: { type: \"json_object\" },\n  temperature: 0.3,\n  messages: [\n    {\n      role: \"system\",\n      content: \"You are a competitive intelligence analyst. Analyze the competitor update and respond ONLY with a JSON object containing: summary (2-3 sentences), impact_level (High, Medium, or Low), category (one of: Product Launch, Pricing Change, Executive Hire, Other), strategic_recommendation (one concise actionable sentence). If historical context about past updates from this competitor is provided, factor any pattern or trend (e.g. repeated pricing changes, frequent leadership turnover) into the strategic_recommendation.\"\n    },\n    {\n      role: \"user\",\n      content: `Competitor: ${$json.competitor_name}\\nTitle: ${$json.title}\\nContent: ${$json.content}\\nSource Link: ${$json.link}\\n\\nHistorical Context:\\n${$json.historical_context}`\n    }\n  ]\n}) }}",
+        "options": { "response": { "response": { "responseFormat": "json" } }, "timeout": 45000 }
+      },
+      "id": "3cceccdb-d97c-44dd-8720-f904ab8bac71",
+      "name": "AI - Analyze and Classify Update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [10192, 1600],
+      "retryOnFail": false,
+      "credentials": {
+        "httpHeaderAuth": { "id": "YOUR_OPENROUTER_HEADER_AUTH_CREDENTIAL_ID", "name": "OpenRouter API Key (Header Auth)" },
+        "openRouterApi": { "id": "YOUR_OPENROUTER_CREDENTIAL_ID", "name": "OpenRouter account" }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [
+            {
+              "leftValue": "={{ (() => { try { return $('Increment Retry Count - AI Analysis').item.json.retryCountAi || 0; } catch(e) { return 0; } })() }}",
+              "rightValue": 3,
+              "operator": { "type": "number", "operation": "lt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "91fe1c02-9b7d-4b49-a4c6-e54e53a2440e",
+      "name": "Check AI Retry Limit",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [10192, 1824]
+    },
+    {
+      "parameters": {
+        "jsCode": "let priorCount = 0;\ntry {\n  priorCount = $('Increment Retry Count - AI Analysis').item.json.retryCountAi || 0;\n} catch (e) {\n  priorCount = 0;\n}\nconst retryCountAi = priorCount + 1;\nconst original = $('Format Historical Context').item.json;\nconsole.log(`[LOG] Retry attempt ${retryCountAi} of 3 for AI analysis | Competitor: ${original.competitor_name}`);\nreturn { json: { ...original, retryCountAi } };"
+      },
+      "id": "9f3d7842-356a-4e2f-97a8-69fb3d7bcef1",
+      "name": "Increment Retry Count - AI Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [10416, 1760]
+    },
+    {
+      "parameters": { "amount": "={{ 5 * Math.pow(2, ($json.retryCountAi || 1) - 1) }}" },
+      "id": "6d5e684e-314b-403b-a055-de1658bcedec",
+      "name": "Exponential Backoff Wait - AI Analysis",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [10640, 1760],
+      "webhookId": "728d35d6-608c-4319-9b46-13f9eacb9942"
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log(`[LOG] Fallback triggered | Reason: AI analysis unavailable after 3 retries | Competitor: ${$json.competitor_name}`);\nreturn {\n  json: {\n    ...$json,\n    summary: `AI analysis unavailable. Manual review required for this update from ${$json.competitor_name}: ${$json.title}`,\n    impact_level: 'Medium',\n    category: 'Other',\n    strategic_recommendation: 'Manual review recommended - monitor for potential market shift',\n    analysis_status: 'fallback'\n  }\n};"
+      },
+      "id": "86890045-d734-43cb-ae41-5562bf899636",
+      "name": "Fallback - Generic Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [10416, 1920]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content) || '{}';\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  parsed = {\n    summary: 'Unable to parse AI response.',\n    impact_level: 'Medium',\n    category: 'Other',\n    strategic_recommendation: 'Manual review recommended - monitor for potential market shift'\n  };\n}\n\nconst original = $('Format Historical Context').item.json;\n\nconst competitorName = original.competitor_name ||\n  $('Normalize Update Data').item.json.competitor_name ||\n  'Unknown Competitor';\n\nconst result = {\n  ...original,\n  competitor_name: competitorName,\n  summary: parsed.summary,\n  impact_level: parsed.impact_level,\n  category: parsed.category,\n  strategic_recommendation: parsed.strategic_recommendation,\n  analysis_status: 'success',\n  link: original.link || $('Normalize Update Data').item.json.link || '',\n  published_date: original.published_date || $('Normalize Update Data').item.json.published_date || new Date().toISOString()\n};\n\nconsole.log(`[LOG] Draft generated | Competitor: ${result.competitor_name} | Category: ${result.category} | Impact: ${result.impact_level}`);\nconsole.log(`[LOG] Analysis complete | Competitor: ${result.competitor_name} | Summary: ${result.summary}`);\n\nreturn { json: result };"
+      },
+      "id": "3f0ab6c6-14b5-4188-bdf0-76fc82bc0535",
+      "name": "Parse & Log AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [10416, 1600]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $json;\nconst safeId = (item.competitor_name || 'unknown-competitor').toLowerCase().replace(/[^a-z0-9]+/g, '-');\nconst vectorId = `${safeId}-${Date.now()}`;\n\nreturn {\n  json: {\n    ...item,\n    pinecone_vector_id: vectorId,\n    retryCountStore: 0,\n    pinecone_metadata: {\n      competitor_name: item.competitor_name || '',\n      category: item.category || '',\n      impact_level: item.impact_level || '',\n      source_link: item.link || '',\n      published_date: item.published_date || '',\n      analysis_status: item.analysis_status || '',\n      summary: (item.summary || '').slice(0, 500)\n    }\n  }\n};"
+      },
+      "id": "9c0e42f0-023f-4f49-880b-4fee00df4d1d",
+      "name": "Prepare Document & Metadata for Vector Store",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [10656, 1600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PINECONE-INDEX-HOST.svc.YOUR-ENVIRONMENT.pinecone.io/vectors/upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vectors: [ { id: $json.pinecone_vector_id, values: $json.embedding_vector, metadata: $json.pinecone_metadata } ] }) }}",
+        "options": {}
+      },
+      "id": "0987f569-c7bc-4a6c-b19c-efd678e7997d",
+      "name": "Store Insight - Pinecone (competitor-insights-index)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [10896, 1600],
+      "credentials": { "pineconeApi": { "id": "YOUR_PINECONE_CREDENTIAL_ID", "name": "Pinecone account" } },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+          "conditions": [
+            {
+              "leftValue": "={{ (() => { try { return $('Increment Retry Count - Pinecone Store').item.json.retryCountStore || 0; } catch(e) { return 0; } })() }}",
+              "rightValue": 3,
+              "operator": { "type": "number", "operation": "lt" },
+              "id": "5dc93b9c-8e5d-4e8b-9f38-9356756bc44f"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "46847baa-d429-4a23-a6c5-3b19e6fa0d64",
+      "name": "Check Pinecone Store Retry Limit",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [10896, 1808]
+    },
+    {
+      "parameters": {
+        "jsCode": "let priorCount = 0;\ntry {\n  priorCount = $('Increment Retry Count - Pinecone Store').item.json.retryCountStore || 0;\n} catch (e) {\n  priorCount = 0;\n}\nconst retryCountStore = priorCount + 1;\nconst original = $('Prepare Document & Metadata for Vector Store').item.json;\nconsole.log(`[LOG] Retry attempt ${retryCountStore} of 3 for Pinecone storage | Competitor: ${original.competitor_name}`);\nreturn { json: { ...original, retryCountStore } };"
+      },
+      "id": "90bb1c14-bda8-46ca-b126-65c5dc1b9dfe",
+      "name": "Increment Retry Count - Pinecone Store",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [10896, 1968]
+    },
+    {
+      "parameters": { "amount": "={{ 5 * Math.pow(2, ($json.retryCountStore || 1) - 1) }}" },
+      "id": "55f50190-1072-413f-a190-abd55363dd62",
+      "name": "Exponential Backoff Wait - Pinecone Store",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [11120, 1968],
+      "webhookId": "5678f5cb-a840-4557-8ace-56e1df06dd0c"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Prepare Document & Metadata for Vector Store').item.json;\n\nif ($json.error) {\n  console.log(`[LOG] Retry exhausted for Pinecone storage after 3 attempts | Competitor: ${original.competitor_name}`);\n  console.log(`[LOG] Vector storage failed | Competitor: ${original.competitor_name} | Continuing workflow - insight will not be retrievable via vector search`);\n} else {\n  console.log(`[LOG] Vector storage complete | Competitor: ${original.competitor_name} | Index: competitor-insights-index`);\n}\n\nreturn { json: original };"
+      },
+      "id": "65a3e700-cedb-46c1-b084-57d99235e5e4",
+      "name": "Log Storage Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [11360, 1600]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 }, "conditions": [{ "leftValue": "={{ $json.category }}", "rightValue": "Product Launch", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" },
+              "renameOutput": true,
+              "outputKey": "Product Launch"
+            },
+            {
+              "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 }, "conditions": [{ "leftValue": "={{ $json.category }}", "rightValue": "Pricing Change", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" },
+              "renameOutput": true,
+              "outputKey": "Pricing Change"
+            },
+            {
+              "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 }, "conditions": [{ "leftValue": "={{ $json.category }}", "rightValue": "Executive Hire", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" },
+              "renameOutput": true,
+              "outputKey": "Executive Hire"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "2dff7164-58c6-4807-be74-6a6276f00570",
+      "name": "Route by Category",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [11344, 1840]
+    },
+    {
+      "parameters": {
+        "jsCode": "const channelMap = {\n  'Product Launch': 'product-competitor-alerts',\n  'Pricing Change': 'pricing-competitor-alerts',\n  'Executive Hire': 'talent-intel-alerts'\n};\n\nconst slackChannel = channelMap[$json.category] || 'general-competitor-alerts';\nconst impactEmoji = { High: '🔴', Medium: '🟡', Low: '🟢' }[$json.impact_level] || '⚪';\n\nconst message = [\n  `${impactEmoji} *Competitor Update Detected* — ${$json.competitor_name}`,\n  '',\n  `*Title:* ${$json.title}`,\n  `*Category:* ${$json.category}`,\n  `*Impact Level:* ${$json.impact_level}`,\n  '',\n  `*Summary:*`,\n  $json.summary,\n  '',\n  `*Strategic Recommendation:*`,\n  $json.strategic_recommendation,\n  '',\n  `*Source:* ${$json.link}`\n].join('\\n');\n\nreturn {\n  json: {\n    ...$json,\n    slack_channel: slackChannel,\n    slack_message: message,\n    retrySlackCount: 0\n  }\n};"
+      },
+      "id": "947aeef2-da59-4165-95f6-94ae6b19aab4",
+      "name": "Assign Channel & Build Slack Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [11616, 1600]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "={{ $json.slack_channel }}", "mode": "name" },
+        "text": "={{ $json.slack_message }}",
+        "otherOptions": {}
+      },
+      "id": "dba3ed0f-1c7d-4225-9897-8d9df1ab1bd2",
+      "name": "Send Slack Notification - Category Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [11856, 1600],
+      "webhookId": "c25498bd-abaf-4c17-88ac-c024776a8ea9",
+      "credentials": { "slackApi": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [
+            {
+              "leftValue": "={{ (() => { try { return $('Increment Retry Count - Category Slack').item.json.retrySlackCount || 0; } catch(e) { return 0; } })() }}",
+              "rightValue": 3,
+              "operator": { "type": "number", "operation": "lt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7bd4e877-74a8-4798-b241-00b5657971b1",
+      "name": "Check Category Slack Retry Limit",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [11856, 1808]
+    },
+    {
+      "parameters": {
+        "jsCode": "let priorCount = 0;\ntry {\n  priorCount = $('Increment Retry Count - Category Slack').item.json.retrySlackCount || 0;\n} catch (e) {\n  priorCount = 0;\n}\nconst retrySlackCount = priorCount + 1;\nconst original = $('Assign Channel & Build Slack Message').item.json;\nconsole.log(`[LOG] Retry attempt ${retrySlackCount} of 3 for Slack delivery | Channel: ${original.slack_channel} | Competitor: ${original.competitor_name}`);\nreturn { json: { ...original, retrySlackCount } };"
+      },
+      "id": "fa52fa23-e5f7-4960-a904-c09575a8b89a",
+      "name": "Increment Retry Count - Category Slack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [12080, 1744]
+    },
+    {
+      "parameters": { "amount": "={{ 5 * Math.pow(2, ($json.retrySlackCount || 1) - 1) }}" },
+      "id": "9b030a44-6b35-431c-99f5-c753e2171203",
+      "name": "Exponential Backoff Wait - Category Slack",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [12288, 1744],
+      "webhookId": "dd8839f3-c02d-4be1-aba5-16a1551891aa"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Assign Channel & Build Slack Message').item.json;\n\nif ($json.error) {\n  console.log(`[LOG] Final status: FAILURE | Slack delivery failed for category channel after 3 retries | Channel: ${original.slack_channel} | Competitor: ${original.competitor_name}`);\n} else {\n  console.log(`[LOG] Category channel notification sent | Competitor: ${original.competitor_name} | Channel: ${original.slack_channel}`);\n}\n\nreturn { json: { ...original, retryEscalationCount: 0 } };"
+      },
+      "id": "50d456ce-0793-4d50-ad59-edff87087672",
+      "name": "Log Category Slack Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [12096, 1600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [{ "leftValue": "={{ $json.impact_level }}", "rightValue": "High", "operator": { "type": "string", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8f42f5ff-b8b1-4ccb-9a9a-622f5d171dab",
+      "name": "Is High Impact - Escalate to Executives",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [12336, 1600]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "executive-competitor-alerts", "mode": "name" },
+        "text": "={{ '🚨 HIGH IMPACT ESCALATION 🚨\\n' + $json.slack_message }}",
+        "otherOptions": {}
+      },
+      "id": "2ba84f0a-5756-4f66-8cf2-2bead3330c94",
+      "name": "Send Slack Notification - Executive Escalation",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [12576, 1504],
+      "webhookId": "192649ee-cfb3-437f-bf08-88792e53bd56",
+      "credentials": { "slackApi": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [
+            {
+              "leftValue": "={{ (() => { try { return $('Increment Retry Count - Escalation Slack').item.json.retryEscalationCount || 0; } catch(e) { return 0; } })() }}",
+              "rightValue": 3,
+              "operator": { "type": "number", "operation": "lt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "57c410b8-fa40-4c63-9a82-86c3f6d36752",
+      "name": "Check Escalation Slack Retry Limit",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [12576, 1680]
+    },
+    {
+      "parameters": {
+        "jsCode": "let priorCount = 0;\ntry {\n  priorCount = $('Increment Retry Count - Escalation Slack').item.json.retryEscalationCount || 0;\n} catch (e) {\n  priorCount = 0;\n}\nconst retryEscalationCount = priorCount + 1;\nconst original = $('Log Category Slack Outcome').item.json;\nconsole.log(`[LOG] Retry attempt ${retryEscalationCount} of 3 for executive escalation Slack delivery | Competitor: ${original.competitor_name}`);\nreturn { json: { ...original, retryEscalationCount } };"
+      },
+      "id": "e422dd60-014a-4efb-90a4-41ad3865250f",
+      "name": "Increment Retry Count - Escalation Slack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [12800, 1744]
+    },
+    {
+      "parameters": { "amount": "={{ 5 * Math.pow(2, ($json.retryEscalationCount || 1) - 1) }}" },
+      "id": "8c6fc806-5e02-4637-8c9d-64287d0bc666",
+      "name": "Exponential Backoff Wait - Escalation Slack",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [13008, 1744],
+      "webhookId": "b504e515-0490-41a2-a16f-78a9b83dce98"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Log Category Slack Outcome').item.json;\nconst competitor = original.competitor_name;\nconst category = original.category;\nconst impact = original.impact_level;\n\nif ($json.error) {\n  console.log(`[LOG] Final status: FAILURE | Executive escalation Slack delivery failed after 3 retries | Competitor: ${competitor}`);\n} else {\n  console.log(`[LOG] Final status: SUCCESS | Workflow complete | Competitor: ${competitor} | Category: ${category} | Impact: ${impact}`);\n}\n\nreturn { json: original };"
+      },
+      "id": "8f62d40d-9c98-4854-baf4-9793b60f501b",
+      "name": "Log Final Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [12816, 1600]
+    },
+    {
+      "parameters": {
+        "content": "## Setup Notes - FULLY FREE, ONE PROVIDER (OpenRouter)\n- RSS feeds pre-filled with two verified working software-house feeds (YesITLabs, Flexsin) - swap for your real competitors.\n- Point your social listening / press-release tool at the webhook URL from 'Social Media & Press Release Webhook'.\n- ALL AI work (chat analysis + embeddings) now runs through ONE OpenRouter credential. Create a Header Auth credential 'OpenRouter API Key': header 'Authorization' = 'Bearer sk-or-...', select it in 'AI - Analyze and Classify Update' AND 'Generate Embedding - OpenRouter (bge-m3)'.\n- Chat model: 'openrouter/free' (auto-router, always live, structured-JSON capable).\n- Embedding model: BAAI/bge-m3 via OpenRouter's /embeddings endpoint - NOT $0, costs ~$0.01 per 1M input tokens (fractions of a cent per run), needs a small funded OpenRouter balance. Genuinely free alternative was Google Gemini if you change your mind later.\n- CRITICAL: bge-m3 outputs 1024-dimension vectors. Recreate your Pinecone index with Dimensions = 1024.\n- Set your own Pinecone index host in both HTTP Request nodes ('Query Similar Past Insights' and 'Store Insight') - replace the YOUR-PINECONE-INDEX-HOST placeholder with your real index URL from the Pinecone console.",
+        "height": 280,
+        "width": 520
+      },
+      "id": "c2fef7df-d9bf-47e9-98ea-6fe107a87bdc",
+      "name": "Sticky Note - Configuration",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [7888, 1120]
+    },
+    {
+      "parameters": {
+        "content": "## Retry Pattern (FIXED)\nAll 5 retry chains (Scrape, AI, Pinecone Store, Slack category, Slack escalation) now read their retry count back from the Increment node's OWN prior output (with a safe try/catch fallback to 0 on first attempt) instead of trusting the failing node's error-branch output to carry the count forward - the latter does not reliably happen in n8n and was causing infinite retry loops.\n\nThe embedding is generated ONCE and reused twice: first to query Pinecone for historical context, then again at storage time.\n\n'Log Storage Outcome', 'Log Category Slack Outcome', and 'Log Final Status' also re-fetch original data across the error boundary - do not remove, downstream nodes depend on them.",
+        "height": 280,
+        "width": 460
+      },
+      "id": "95d44007-fe2d-45d2-9478-4b2400ab73b8",
+      "name": "Sticky Note - Retry & Optimization Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [8368, 1120]
+    },
+    {
+      "parameters": {
+        "content": "## Test Before Activating\n1. Run 'Execute previous nodes' from AI - Analyze and Classify Update with a real competitor URL to confirm the full chain end-to-end.\n2. Sample webhook payload:\n{ \"competitor_name\": \"Acme Corp\", \"title\": \"Acme launches new pricing tier\", \"link\": \"https://acme.com/news/pricing\", \"content\": \"...\" }\n3. Expected Slack message: emoji + impact level, category, summary, strategic recommendation, source link.\n4. To test the retry/backoff path, temporarily point the scrape URL at an invalid domain and confirm 3 retry-attempt log lines + 1 exhaustion log line appear before fallback kicks in - it should now stop at 3, not loop forever.",
+        "height": 240,
+        "width": 480
+      },
+      "id": "6ee0a94a-4ec2-458c-8487-25bc9f2baf97",
+      "name": "Sticky Note - Testing Guidance",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [7888, 1968]
+    }
+  ],
+  "connections": {
+    "Competitor RSS Feed Trigger - YesITLabs": { "main": [[{ "node": "Normalize Update Data", "type": "main", "index": 0 }]] },
+    "Competitor RSS Feed Trigger - Flexsin": { "main": [[{ "node": "Normalize Update Data", "type": "main", "index": 0 }]] },
+    "Social Media & Press Release Webhook": { "main": [[{ "node": "Normalize Update Data", "type": "main", "index": 0 }]] },
+    "Normalize Update Data": { "main": [[{ "node": "Validate Update Data", "type": "main", "index": 0 }]] },
+    "Validate Update Data": { "main": [[{ "node": "Scrape Competitor Source Page", "type": "main", "index": 0 }], [{ "node": "Log & End - Skipped", "type": "main", "index": 0 }]] },
+    "Scrape Competitor Source Page": { "main": [[{ "node": "Finalize Scraped Content", "type": "main", "index": 0 }], [{ "node": "Check Scrape Retry Limit", "type": "main", "index": 0 }]] },
+    "Check Scrape Retry Limit": { "main": [[{ "node": "Increment Retry Count - Scrape", "type": "main", "index": 0 }], [{ "node": "Fallback - Use Snippet Content", "type": "main", "index": 0 }]] },
+    "Increment Retry Count - Scrape": { "main": [[{ "node": "Exponential Backoff Wait - Scrape", "type": "main", "index": 0 }]] },
+    "Exponential Backoff Wait - Scrape": { "main": [[{ "node": "Scrape Competitor Source Page", "type": "main", "index": 0 }]] },
+    "Fallback - Use Snippet Content": { "main": [[{ "node": "Check Content Sufficiency", "type": "main", "index": 0 }]] },
+    "Finalize Scraped Content": { "main": [[{ "node": "Check Content Sufficiency", "type": "main", "index": 0 }]] },
+    "Check Content Sufficiency": { "main": [[{ "node": "Log & End - Skipped", "type": "main", "index": 0 }], [{ "node": "Generate Embedding - OpenRouter (bge-m3)", "type": "main", "index": 0 }]] },
+    "Generate Embedding - OpenRouter (bge-m3)": { "main": [[{ "node": "Query Similar Past Insights - Pinecone", "type": "main", "index": 0 }], [{ "node": "Format Historical Context", "type": "main", "index": 0 }]] },
+    "Query Similar Past Insights - Pinecone": { "main": [[{ "node": "Format Historical Context", "type": "main", "index": 0 }], [{ "node": "Format Historical Context", "type": "main", "index": 0 }]] },
+    "Format Historical Context": { "main": [[{ "node": "AI - Analyze and Classify Update", "type": "main", "index": 0 }]] },
+    "AI - Analyze and Classify Update": { "main": [[{ "node": "Parse & Log AI Response", "type": "main", "index": 0 }], [{ "node": "Check AI Retry Limit", "type": "main", "index": 0 }]] },
+    "Check AI Retry Limit": { "main": [[{ "node": "Increment Retry Count - AI Analysis", "type": "main", "index": 0 }], [{ "node": "Fallback - Generic Classification", "type": "main", "index": 0 }]] },
+    "Increment Retry Count - AI Analysis": { "main": [[{ "node": "Exponential Backoff Wait - AI Analysis", "type": "main", "index": 0 }]] },
+    "Exponential Backoff Wait - AI Analysis": { "main": [[{ "node": "AI - Analyze and Classify Update", "type": "main", "index": 0 }]] },
+    "Fallback - Generic Classification": { "main": [[{ "node": "Prepare Document & Metadata for Vector Store", "type": "main", "index": 0 }]] },
+    "Parse & Log AI Response": { "main": [[{ "node": "Prepare Document & Metadata for Vector Store", "type": "main", "index": 0 }]] },
+    "Prepare Document & Metadata for Vector Store": { "main": [[{ "node": "Store Insight - Pinecone (competitor-insights-index)", "type": "main", "index": 0 }]] },
+    "Store Insight - Pinecone (competitor-insights-index)": { "main": [[{ "node": "Log Storage Outcome", "type": "main", "index": 0 }], [{ "node": "Check Pinecone Store Retry Limit", "type": "main", "index": 0 }]] },
+    "Check Pinecone Store Retry Limit": { "main": [[{ "node": "Increment Retry Count - Pinecone Store", "type": "main", "index": 0 }], [{ "node": "Log Storage Outcome", "type": "main", "index": 0 }]] },
+    "Increment Retry Count - Pinecone Store": { "main": [[{ "node": "Exponential Backoff Wait - Pinecone Store", "type": "main", "index": 0 }]] },
+    "Exponential Backoff Wait - Pinecone Store": { "main": [[{ "node": "Store Insight - Pinecone (competitor-insights-index)", "type": "main", "index": 0 }]] },
+    "Log Storage Outcome": { "main": [[{ "node": "Route by Category", "type": "main", "index": 0 }]] },
+    "Route by Category": { "main": [[{ "node": "Assign Channel & Build Slack Message", "type": "main", "index": 0 }], [{ "node": "Assign Channel & Build Slack Message", "type": "main", "index": 0 }], [{ "node": "Assign Channel & Build Slack Message", "type": "main", "index": 0 }], [{ "node": "Assign Channel & Build Slack Message", "type": "main", "index": 0 }]] },
+    "Assign Channel & Build Slack Message": { "main": [[{ "node": "Send Slack Notification - Category Channel", "type": "main", "index": 0 }]] },
+    "Send Slack Notification - Category Channel": { "main": [[{ "node": "Log Category Slack Outcome", "type": "main", "index": 0 }], [{ "node": "Check Category Slack Retry Limit", "type": "main", "index": 0 }]] },
+    "Check Category Slack Retry Limit": { "main": [[{ "node": "Increment Retry Count - Category Slack", "type": "main", "index": 0 }], [{ "node": "Log Category Slack Outcome", "type": "main", "index": 0 }]] },
+    "Increment Retry Count - Category Slack": { "main": [[{ "node": "Exponential Backoff Wait - Category Slack", "type": "main", "index": 0 }]] },
+    "Exponential Backoff Wait - Category Slack": { "main": [[{ "node": "Send Slack Notification - Category Channel", "type": "main", "index": 0 }]] },
+    "Log Category Slack Outcome": { "main": [[{ "node": "Is High Impact - Escalate to Executives", "type": "main", "index": 0 }]] },
+    "Is High Impact - Escalate to Executives": { "main": [[{ "node": "Send Slack Notification - Executive Escalation", "type": "main", "index": 0 }], [{ "node": "Log Final Status", "type": "main", "index": 0 }]] },
+    "Send Slack Notification - Executive Escalation": { "main": [[{ "node": "Log Final Status", "type": "main", "index": 0 }], [{ "node": "Check Escalation Slack Retry Limit", "type": "main", "index": 0 }]] },
+    "Check Escalation Slack Retry Limit": { "main": [[{ "node": "Increment Retry Count - Escalation Slack", "type": "main", "index": 0 }], [{ "node": "Log Final Status", "type": "main", "index": 0 }]] },
+    "Increment Retry Count - Escalation Slack": { "main": [[{ "node": "Exponential Backoff Wait - Escalation Slack", "type": "main", "index": 0 }]] },
+    "Exponential Backoff Wait - Escalation Slack": { "main": [[{ "node": "Send Slack Notification - Executive Escalation", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "binaryMode": "separate" },
+  "pinData": {},
+  "triggerCount": 3,
+  "tags": []
+}

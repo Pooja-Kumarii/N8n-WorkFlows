@@ -1,0 +1,312 @@
+{
+  "name": "Automated Contract Risk Extraction",
+  "description": null,
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_DRIVE_FOLDER_ID",
+          "mode": "list",
+          "cachedResultName": "Contracts_Inbox",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/YOUR_GOOGLE_DRIVE_FOLDER_ID"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "013e4951-f224-4cd7-b057-eff0e9f3d9c9",
+      "name": "Google Drive Trigger",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [-1632, 240],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "pdf-only",
+              "leftValue": "={{ $json.mimeType }}",
+              "rightValue": "application/pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "117fc24a-a5bb-4fa4-9fd5-3fbda47b28b2",
+      "name": "Is PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-1408, 240]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "61cb4f9f-5c35-4c6a-a39a-936f09c48dbb",
+      "name": "Download PDF",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-1184, 144],
+      "retryOnFail": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "id": "84d582e8-4ccc-49aa-98e5-689fb7e59149",
+      "name": "Ignore - Not a PDF",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [-1184, 336]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "34e4c080-dd28-4ae5-a493-48e5c0015894",
+      "name": "Extract Text from PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [-960, 64],
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "id": "13b708ae-b500-477e-b5ba-b48fc5f2d4fd",
+      "name": "Failed - Extraction or Classification Error",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [-736, 240]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "risky_clauses",
+        "options": {}
+      },
+      "id": "b44bca4e-0147-4eeb-8ef0-6b8eacfaccf5",
+      "name": "Split Out Risky Clauses",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [-512, -80]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Contract_Risk_Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "risk_level ": "={{ $json.risk_level }}",
+            "clause ": "={{ $json.clause }}",
+            "reason ": "={{ $json.reason }}",
+            " contract_name ": "={{ $('Google Drive Trigger').item.json.name }}",
+            "processed_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": " contract_name ",
+              "displayName": " contract_name ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "clause ",
+              "displayName": "clause ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "risk_level ",
+              "displayName": "risk_level ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reason ",
+              "displayName": "reason ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "08dd2c4e-17c6-4657-ab38-1404ccf98c04",
+      "name": "Log Risky Clauses to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [-288, -80],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "notify-legal-team"
+        },
+        "text": "=:page_facing_up: *Contract reviewed: {{ $('Google Drive Trigger').item.json.name }}*\n\n*Summary:*\n{{ $json.summary }}\n\n*High-risk clauses found:* {{ $json.risky_clause_count }}\n\n*Key Obligations:*\n{{ $json.key_obligations.map(o => '• ' + o).join('\\n') }}\n\n_Full clause-by-clause breakdown logged in the Contract_Risk_Log sheet._",
+        "otherOptions": {}
+      },
+      "id": "b7590784-6ca4-4ab4-8299-029b3f55c3d5",
+      "name": "Notify Legal Team on Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [-512, 112],
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_SLACK_CREDENTIAL_ID",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
+      },
+      "type": "CUSTOM.contractRiskClassifier",
+      "typeVersion": 1,
+      "position": [-736, 16],
+      "id": "f3d8d9d2-6018-478d-8289-43845cd6a58b",
+      "name": "Contract Risk Classifier",
+      "retryOnFail": true,
+      "credentials": {
+        "contractRiskOpenRouterApi": {
+          "id": "YOUR_OPENROUTER_CREDENTIAL_ID",
+          "name": "OpenRouter (Contract Risk Classifier) account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Google Drive Trigger": {
+      "main": [[{"node": "Is PDF?", "type": "main", "index": 0}]]
+    },
+    "Is PDF?": {
+      "main": [
+        [{"node": "Download PDF", "type": "main", "index": 0}],
+        [{"node": "Ignore - Not a PDF", "type": "main", "index": 0}]
+      ]
+    },
+    "Download PDF": {
+      "main": [
+        [{"node": "Extract Text from PDF", "type": "main", "index": 0}],
+        [{"node": "Failed - Extraction or Classification Error", "type": "main", "index": 0}]
+      ]
+    },
+    "Extract Text from PDF": {
+      "main": [
+        [{"node": "Contract Risk Classifier", "type": "main", "index": 0}],
+        [{"node": "Failed - Extraction or Classification Error", "type": "main", "index": 0}]
+      ]
+    },
+    "Split Out Risky Clauses": {
+      "main": [[{"node": "Log Risky Clauses to Sheet", "type": "main", "index": 0}]]
+    },
+    "Ignore - Not a PDF": {"main": [[]]},
+    "Contract Risk Classifier": {
+      "main": [
+        [
+          {"node": "Split Out Risky Clauses", "type": "main", "index": 0},
+          {"node": "Notify Legal Team on Slack", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_INSTANCE_ID"
+  }
+}

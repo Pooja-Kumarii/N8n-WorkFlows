@@ -1,0 +1,345 @@
+{
+  "name": "Agentic Email Triage & Draft Reply",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "q": "is:unread in:inbox"
+        }
+      },
+      "id": "b6172c0b-4552-454d-83bb-d4feb4b006c2",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [-1424, 16],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "__SET_YOUR_GMAIL_CREDENTIAL_ID__",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "messageId", "type": "string", "value": "={{ $json.id }}" },
+            { "id": "a2", "name": "subject", "type": "string", "value": "={{ $json.Subject }}" },
+            { "id": "a3", "name": "sender", "type": "string", "value": "={{ $json.From }}" },
+            { "id": "a4", "name": "body", "type": "string", "value": "={{ $json.text || $json.snippet }}" },
+            { "id": "a5", "name": "receivedAt", "type": "string", "value": "={{ $now.toISO() }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "679e8c25-4688-49d2-9ccb-61e53a02442d",
+      "name": "Extract Email Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1184, 16]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "__SET_YOUR_DATATABLE_ID__",
+          "mode": "list",
+          "cachedResultName": "processed_emails"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            { "keyName": "uid", "keyValue": "={{$json.messageId}}" }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [-944, 32],
+      "id": "64270cef-1e29-4ea6-b411-1957f378974f",
+      "name": "processed_emails",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "dup-cond",
+              "leftValue": "={{ $json.uid }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "73bb692d-ec2d-4a15-950c-21007c50af13",
+      "name": "Already Processed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-704, 16]
+    },
+    {
+      "parameters": {},
+      "id": "b8b07eec-40e3-47b7-80c1-bfc0299c7ae7",
+      "name": "Skip - Duplicate",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [-464, -144]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/classify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"subject\": \"{{ $('Extract Email Fields').item.json.subject }}\",\n  \"body\": \"{{ $('Extract Email Fields').item.json.body }}\"\n}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "6b5d5264-79f2-4d0c-92e2-d153bff0c47c",
+      "name": "Call Triage Microservice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-464, 80],
+      "retryOnFail": true,
+      "onError": "continueErrorOutput",
+      "notes": "Success output (index 0) always contains a valid classification because the microservice's FastAPI response_model enforces the schema - no extra IF check needed. Error output (index 1) routes straight to the failure NoOp below."
+    },
+    {
+      "parameters": {},
+      "id": "c1f811fa-bcc0-408d-b3b0-c3bf9b0cddc1",
+      "name": "Failed - Microservice Error",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [-224, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/text-embedding-3-small', input: $('Extract Email Fields').item.json.subject + '\\n' + $('Extract Email Fields').item.json.body + '\\n' + $json.summary + '\\n' + $json.draft_reply, encoding_format: 'float' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-256, -16],
+      "id": "c73b2bae-b119-43d4-b86e-c48a5b9c07df",
+      "name": "Generate Embeddings",
+      "retryOnFail": true,
+      "credentials": {
+        "openRouterApi": {
+          "id": "__SET_YOUR_OPENROUTER_CREDENTIAL_ID__",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "bd756704-72d5-4418-82b5-16d50b2fe010", "name": "embedding", "value": "={{$json.data[0].embedding}}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-48, -16],
+      "id": "700e145d-4288-45fe-a90c-b942118fc836",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "__SET_YOUR_PINECONE_INDEX_HOST__/vectors/upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vectors: [ { id: $('Extract Email Fields').item.json.messageId, values: $('Generate Embeddings').item.json.data[0].embedding, metadata: { sender: $('Extract Email Fields').item.json.sender, subject: $('Extract Email Fields').item.json.subject, received_at: $('Extract Email Fields').item.json.receivedAt } } ], namespace: 'vectors' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [160, -16],
+      "id": "c9c05fd7-f07c-47f2-b49d-0e2495b4dc0a",
+      "name": "Store in Pinecone",
+      "retryOnFail": true,
+      "credentials": {
+        "pineconeApi": {
+          "id": "__SET_YOUR_PINECONE_CREDENTIAL_ID__",
+          "name": "Pinecone account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#email-approval",
+          "mode": "name"
+        },
+        "text": "=:email: *New draft reply awaiting approval*\n\n*From:* {{ $('Extract Email Fields').item.json.sender }}\n*Subject:* {{ $('Extract Email Fields').item.json.subject }}\n*Classification:* `{{ $('Call Triage Microservice').item.json.classification }}` (confidence: {{ $('Call Triage Microservice').item.json.confidence }})\n\n*Summary:*\n{{ $('Call Triage Microservice').item.json.summary }}\n\n*Draft reply:*\n{{ $('Call Triage Microservice').item.json.draft_reply }}\n\n_Please review, fill in placeholders, and send manually or approve for auto-send._",
+        "otherOptions": {}
+      },
+      "id": "55adfc3b-9dc6-47bc-a8cc-9e2c3a4b0a65",
+      "name": "Post Draft to Slack for Approval",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [384, -48],
+      "webhookId": "__SET_YOUR_WEBHOOK_ID__",
+      "credentials": {
+        "slackApi": {
+          "id": "__SET_YOUR_SLACK_CREDENTIAL_ID__",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "__SET_YOUR_GOOGLE_SHEET_ID__",
+          "mode": "list",
+          "cachedResultName": "Triage_Log"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toISO() }}",
+            "sender": "={{ $('Extract Email Fields').item.json.sender }}",
+            "subject": "={{ $('Extract Email Fields').item.json.subject }}",
+            "status": "posted_for_approval",
+            "classification": "={{ $('Call Triage Microservice').item.json.classification }}",
+            "confidence": "={{ $('Call Triage Microservice').item.json.confidence }}",
+            "summary": "={{ $('Call Triage Microservice').item.json.summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "timestamp", "displayName": "timestamp", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "sender", "displayName": "sender", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "subject", "displayName": "subject", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "classification", "displayName": "classification", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "confidence", "displayName": "confidence", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "summary", "displayName": "summary", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "efd32e45-207c-49a5-827f-bf094991a0b3",
+      "name": "Log Classification in Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [624, -48],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "__SET_YOUR_GOOGLE_SHEETS_CREDENTIAL_ID__",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "__SET_YOUR_DATATABLE_ID__",
+          "mode": "list",
+          "cachedResultName": "processed_emails"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "processed_at": "={{ $now.toISO() }}",
+            "uid": "={{$('Extract Email Fields').item.json.messageId}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "uid", "displayName": "uid", "required": false, "defaultMatch": false, "display": true, "type": "string", "readOnly": false, "removed": false },
+            { "id": "processed_at", "displayName": "processed_at", "required": false, "defaultMatch": false, "display": true, "type": "string", "readOnly": false, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "95138a2c-83db-4d8e-b327-f7d34bda046f",
+      "name": "Mark Email as Processed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [864, -48],
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": { "main": [[{ "node": "Extract Email Fields", "type": "main", "index": 0 }]] },
+    "Extract Email Fields": { "main": [[{ "node": "processed_emails", "type": "main", "index": 0 }]] },
+    "processed_emails": { "main": [[{ "node": "Already Processed?", "type": "main", "index": 0 }]] },
+    "Already Processed?": {
+      "main": [
+        [{ "node": "Skip - Duplicate", "type": "main", "index": 0 }],
+        [{ "node": "Call Triage Microservice", "type": "main", "index": 0 }]
+      ]
+    },
+    "Call Triage Microservice": {
+      "main": [
+        [{ "node": "Generate Embeddings", "type": "main", "index": 0 }],
+        [{ "node": "Failed - Microservice Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate Embeddings": { "main": [[{ "node": "Edit Fields", "type": "main", "index": 0 }]] },
+    "Edit Fields": { "main": [[{ "node": "Store in Pinecone", "type": "main", "index": 0 }]] },
+    "Store in Pinecone": { "main": [[{ "node": "Post Draft to Slack for Approval", "type": "main", "index": 0 }]] },
+    "Post Draft to Slack for Approval": { "main": [[{ "node": "Log Classification in Google Sheet", "type": "main", "index": 0 }]] },
+    "Log Classification in Google Sheet": { "main": [[{ "node": "Mark Email as Processed", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [
+    { "name": "Pooja Kumari" }
+  ]
+}

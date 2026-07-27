@@ -1,0 +1,532 @@
+{
+  "name": "AI Customer Support Ticket Classifier",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-ticket",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "4b267a11-7a9b-43e2-9d1e-381c92225115",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-4672, 352],
+      "webhookId": "__SET_YOUR_WEBHOOK_ID__",
+      "notes": "SECURITY: the production webhookId is the actual live endpoint identifier. Do not share this value publicly - anyone with it can POST fake tickets to this workflow."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+          "conditions": [
+            { "id": "cond-name", "leftValue": "={{ $json.body.customer_name }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } },
+            { "id": "cond-email", "leftValue": "={{ $json.body.customer_email }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } },
+            { "id": "cond-message", "leftValue": "={{ $json.body.message }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } },
+            { "id": "cond-length", "leftValue": "={{ $json.body.message.length }}", "rightValue": 10, "operator": { "type": "number", "operation": "gte" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "86bbfe13-d708-4768-a07e-3cd2bd613fa5",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [-4432, 352]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', code: 400, message: 'Invalid ticket. customer_name, customer_email and message (min 10 chars) are required.' }) }}",
+        "options": { "responseCode": 400 }
+      },
+      "id": "777a5b91-a123-46b9-9cef-7b3ef78757ef",
+      "name": "Respond - Invalid Input",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-4432, 592]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "f1", "name": "ticket_id", "value": "={{ 'TKT-' + Date.now() + '-' + Math.floor(Math.random() * 1000) }}", "type": "string" },
+            { "id": "f2", "name": "customer_name", "value": "={{ $json.body.customer_name }}", "type": "string" },
+            { "id": "f3", "name": "customer_email", "value": "={{ $json.body.customer_email }}", "type": "string" },
+            { "id": "f4", "name": "message", "value": "={{ $json.body.message }}", "type": "string" },
+            { "id": "f5", "name": "created_at", "value": "={{ new Date().toISOString() }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a09ad82b-e8a7-406d-9a5c-b77d4e052d6c",
+      "name": "Set Ticket Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-4192, 352]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"meta-llama/llama-3-8b-instruct\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a customer support ticket classifier. Analyze the ticket and respond ONLY in this exact JSON format, nothing else:\\n{\\n  \\\"category\\\": \\\"<billing|technical|feature_request|general>\\\",\\n  \\\"sentiment\\\": \\\"<positive|neutral|negative|angry>\\\",\\n  \\\"urgency\\\": \\\"<low|medium|high|critical>\\\",\\n  \\\"department\\\": \\\"<Billing Team|Tech Support|Product Team|General Support>\\\",\\n  \\\"summary\\\": \\\"<one sentence summary>\\\"\\n}\\n\\nRULES:\\n- billing: payment, invoice, refund, subscription, charge\\n- technical: bug, error, not working, crash, broken, down\\n- feature_request: suggestion, new feature, improvement, would be nice\\n- general: everything else\\n- critical: system down, data loss, security breach\\n- high: blocking user completely\\n- angry: harsh language, threats, ALL CAPS\\n- If message is gibberish or spam, set urgency low and category general\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Classify this ticket:\\\\nCustomer: ' + $json.customer_name + '\\\\nMessage: ' + $json.message }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "d4794545-1f8a-4fcd-b4e8-0ba06f2874d8",
+      "name": "LLM - Classify Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-3952, 352],
+      "credentials": { "openRouterApi": { "id": "__SET_YOUR_OPENROUTER_CREDENTIAL_ID__", "name": "OpenRouter account" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+          "conditions": [
+            { "id": "cond-llm", "leftValue": "={{ $json.choices[0].message.content }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f168beef-460a-4f3d-8e3f-dcf7f0c55aeb",
+      "name": "LLM Response Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [-3712, 352]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "__SET_YOUR_MANUAL_REVIEW_CHANNEL_ID__", "mode": "list", "cachedResultName": "manual-review" },
+        "text": "=⚠️ *MANUAL REVIEW REQUIRED*\n\n*Ticket ID:* {{ $('Set Ticket Data').item.json.ticket_id }}\n*Customer:* {{ $('Set Ticket Data').item.json.customer_name }}\n*Email:* {{ $('Set Ticket Data').item.json.customer_email }}\n*Message:* {{ $('Set Ticket Data').item.json.message }}\n\n*Reason:* AI classification failed. Please review manually.",
+        "otherOptions": {}
+      },
+      "id": "eac59b62-186b-47cc-8d54-9152c37a586a",
+      "name": "Slack - Manual Review Fallback",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [-3712, 592],
+      "webhookId": "__SET_WEBHOOK_ID__",
+      "credentials": { "slackApi": { "id": "__SET_YOUR_SLACK_CREDENTIAL_ID__", "name": "Slack account" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'manual_review', ticket_id: $('Set Ticket Data').item.json.ticket_id, message: 'AI classification failed. Ticket sent for manual review.' }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "b5f3538c-eaa0-4491-aab5-7d94ce05f2a8",
+      "name": "Respond - Manual Review",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-3472, 592]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "cf1", "name": "ticket_id", "value": "={{ $('Set Ticket Data').item.json.ticket_id }}", "type": "string" },
+            { "id": "cf2", "name": "customer_name", "value": "={{ $('Set Ticket Data').item.json.customer_name }}", "type": "string" },
+            { "id": "cf3", "name": "customer_email", "value": "={{ $('Set Ticket Data').item.json.customer_email }}", "type": "string" },
+            { "id": "cf4", "name": "message", "value": "={{ $('Set Ticket Data').item.json.message }}", "type": "string" },
+            { "id": "cf5", "name": "category", "value": "={{ (() => { try { return JSON.parse($json.choices[0].message.content).category || 'general' } catch(e) { return 'general' } })() }}", "type": "string" },
+            { "id": "cf6", "name": "sentiment", "value": "={{ (() => { try { return JSON.parse($json.choices[0].message.content).sentiment || 'neutral' } catch(e) { return 'neutral' } })() }}", "type": "string" },
+            { "id": "cf7", "name": "urgency", "value": "={{ (() => { try { return JSON.parse($json.choices[0].message.content).urgency || 'medium' } catch(e) { return 'medium' } })() }}", "type": "string" },
+            { "id": "cf8", "name": "department", "value": "={{ (() => { try { return JSON.parse($json.choices[0].message.content).department || 'General Support' } catch(e) { return 'General Support' } })() }}", "type": "string" },
+            { "id": "cf9", "name": "summary", "value": "={{ (() => { try { return JSON.parse($json.choices[0].message.content).summary || $('Set Ticket Data').item.json.message.substring(0,100) } catch(e) { return $('Set Ticket Data').item.json.message.substring(0,100) } })() }}", "type": "string" },
+            { "id": "cf10", "name": "created_at", "value": "={{ $('Set Ticket Data').item.json.created_at }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "db366c4e-887a-4a9c-b035-f206a6e6949e",
+      "name": "Set Classification Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-3552, 336]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"BAAI/bge-m3\",\n  \"input\": \"={{ $json.message }}\"\n}",
+        "options": {}
+      },
+      "id": "808cb54b-f12f-4ded-a801-af5f26fc99ee",
+      "name": "OpenAI - Generate Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-3280, 336],
+      "credentials": { "openRouterApi": { "id": "__SET_YOUR_OPENROUTER_CREDENTIAL_ID__", "name": "OpenRouter account" } },
+      "notes": "Removed the leftover redundant 'Authorization: Bearer YOUR_OPENAI_API_KEY' header - the predefinedCredentialType (openRouterApi) already injects the correct auth header, so a manual header here was unnecessary and confusing (and risky if someone had filled in a real key there instead of a placeholder)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "__SET_YOUR_PINECONE_INDEX_HOST__/vectors/upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vectors\": [\n    {\n      \"id\": \"{{ $('Set Classification Fields').item.json.ticket_id }}\",\n      \"values\": {{ JSON.stringify($json.data[0].embedding) }},\n      \"metadata\": {\n        \"ticket_id\": \"{{ $('Set Classification Fields').item.json.ticket_id }}\",\n        \"category\": \"{{ $('Set Classification Fields').item.json.category }}\",\n        \"sentiment\": \"{{ $('Set Classification Fields').item.json.sentiment }}\",\n        \"urgency\": \"{{ $('Set Classification Fields').item.json.urgency }}\",\n        \"summary\": \"{{ $('Set Classification Fields').item.json.summary }}\",\n        \"customer_name\": \"{{ $('Set Classification Fields').item.json.customer_name }}\"\n      }\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "93fe82af-60fc-40ff-9e68-707d17a7a0ff",
+      "name": "Pinecone - Store Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-2992, 352],
+      "credentials": { "pineconeApi": { "id": "__SET_YOUR_PINECONE_CREDENTIAL_ID__", "name": "Pinecone account" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "__SET_YOUR_PINECONE_INDEX_HOST__/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vector\": {{ JSON.stringify($('OpenAI - Generate Embedding').item.json.data[0].embedding) }},\n  \"topK\": 3,\n  \"includeMetadata\": true,\n  \"filter\": { \"category\": { \"$eq\": \"{{ $('Set Classification Fields').item.json.category }}\" } }\n}",
+        "options": {}
+      },
+      "id": "aa8183c6-4f3f-4e5e-910a-b98e428c89db",
+      "name": "Pinecone - Query Similar Tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-2752, 352],
+      "credentials": { "pineconeApi": { "id": "__SET_YOUR_PINECONE_CREDENTIAL_ID__", "name": "Pinecone account" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"meta-llama/llama-3-8b-instruct\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful customer support agent. Write a warm, professional auto-response (3-4 sentences). Acknowledge their issue, mention which department is handling it, and give resolution timeframe:\\n- critical: within 1 hour\\n- high: within 4 hours\\n- medium: within 24 hours\\n- low: within 48 hours\\nDo NOT invent solutions. Just acknowledge, department info, and timeframe.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ 'Write auto-response for: Customer: ' + $('Set Classification Fields').item.json.customer_name + ' Category: ' + $('Set Classification Fields').item.json.category + ' Urgency: ' + $('Set Classification Fields').item.json.urgency + ' Department: ' + $('Set Classification Fields').item.json.department + ' Summary: ' + $('Set Classification Fields').item.json.summary }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "6fd6a0f4-21a4-43f6-b601-0eb9db44e7c9",
+      "name": "LLM - Generate Auto Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-2512, 352],
+      "credentials": { "openRouterApi": { "id": "__SET_YOUR_OPENROUTER_CREDENTIAL_ID__", "name": "OpenRouter account" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "out1", "name": "ticket_id", "value": "={{ $('Set Classification Fields').item.json.ticket_id }}", "type": "string" },
+            { "id": "out2", "name": "customer_name", "value": "={{ $('Set Classification Fields').item.json.customer_name }}", "type": "string" },
+            { "id": "out3", "name": "customer_email", "value": "={{ $('Set Classification Fields').item.json.customer_email }}", "type": "string" },
+            { "id": "out4", "name": "message", "value": "={{ $('Set Classification Fields').item.json.message }}", "type": "string" },
+            { "id": "out5", "name": "category", "value": "={{ $('Set Classification Fields').item.json.category }}", "type": "string" },
+            { "id": "out6", "name": "sentiment", "value": "={{ $('Set Classification Fields').item.json.sentiment }}", "type": "string" },
+            { "id": "out7", "name": "urgency", "value": "={{ $('Set Classification Fields').item.json.urgency }}", "type": "string" },
+            { "id": "out8", "name": "department", "value": "={{ $('Set Classification Fields').item.json.department }}", "type": "string" },
+            { "id": "out9", "name": "summary", "value": "={{ $('Set Classification Fields').item.json.summary }}", "type": "string" },
+            { "id": "out10", "name": "auto_response", "value": "={{ (() => { try { return $json.choices[0].message.content } catch(e) { return 'Thank you for contacting us. Our team will get back to you shortly.' } })() }}", "type": "string" },
+            { "id": "out11", "name": "response_status", "value": "sent", "type": "string" },
+            { "id": "out12", "name": "created_at", "value": "={{ $('Set Classification Fields').item.json.created_at }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fc90f286-9657-434c-a98f-94b39891f57d",
+      "name": "Set Output Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-2272, 352]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.category }}", "rightValue": "billing", "operator": { "type": "string", "operation": "equals" }, "id": "95a889cf-a0a6-4870-a267-9b2db56a4224" }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "billing"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.category }}", "rightValue": "technical", "operator": { "type": "string", "operation": "equals" }, "id": "b101be6e-13f9-4a9f-a592-d733e08a413d" }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "technical"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.category }}", "rightValue": "feature_request", "operator": { "type": "string", "operation": "equals" }, "id": "7b9bdd58-b06a-4503-8d9c-b6d5636346f5" }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "feature_request"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "8759e4e4-c680-48c1-a69f-545f9078ae92",
+      "name": "Route by Category",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-2032, 352]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "__SET_YOUR_BILLING_CHANNEL_ID__", "mode": "list", "cachedResultName": "billing-support" },
+        "text": "=💳 *NEW BILLING TICKET*\n*ID:* {{ $json.ticket_id }}\n*Customer:* {{ $json.customer_name }} ({{ $json.customer_email }})\n*Urgency:* {{ $json.urgency.toUpperCase() }}\n*Sentiment:* {{ $json.sentiment }}\n*Summary:* {{ $json.summary }}",
+        "otherOptions": {}
+      },
+      "id": "d4dfc116-9e7b-4216-bea8-d3da25d31476",
+      "name": "Slack - Billing Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [-1792, 48],
+      "webhookId": "__SET_WEBHOOK_ID__",
+      "credentials": { "slackApi": { "id": "__SET_YOUR_SLACK_CREDENTIAL_ID__", "name": "Slack account" } }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "__SET_YOUR_TECH_CHANNEL_ID__", "mode": "list", "cachedResultName": "technical-support" },
+        "text": "=🔧 *NEW TECHNICAL TICKET*\n*ID:* {{ $json.ticket_id }}\n*Customer:* {{ $json.customer_name }} ({{ $json.customer_email }})\n*Urgency:* {{ $json.urgency.toUpperCase() }}\n*Sentiment:* {{ $json.sentiment }}\n*Summary:* {{ $json.summary }}",
+        "otherOptions": {}
+      },
+      "id": "7fd35a43-70f9-45ff-be85-d5da5281570c",
+      "name": "Slack - Tech Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [-1792, 256],
+      "webhookId": "__SET_WEBHOOK_ID__",
+      "credentials": { "slackApi": { "id": "__SET_YOUR_SLACK_CREDENTIAL_ID__", "name": "Slack account" } }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "__SET_YOUR_FEATURE_CHANNEL_ID__", "mode": "list", "cachedResultName": "feature-requests" },
+        "text": "=💡 *NEW FEATURE REQUEST*\n*ID:* {{ $json.ticket_id }}\n*Customer:* {{ $json.customer_name }} ({{ $json.customer_email }})\n*Urgency:* {{ $json.urgency.toUpperCase() }}\n*Sentiment:* {{ $json.sentiment }}\n*Summary:* {{ $json.summary }}",
+        "otherOptions": {}
+      },
+      "id": "cdb216ee-c65d-4c79-8149-d5f7cf782339",
+      "name": "Slack - Feature Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [-1792, 448],
+      "webhookId": "__SET_WEBHOOK_ID__",
+      "credentials": { "slackApi": { "id": "__SET_YOUR_SLACK_CREDENTIAL_ID__", "name": "Slack account" } }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "__SET_YOUR_GENERAL_CHANNEL_ID__", "mode": "list", "cachedResultName": "general-support" },
+        "text": "=📋 *NEW GENERAL TICKET*\n*ID:* {{ $json.ticket_id }}\n*Customer:* {{ $json.customer_name }} ({{ $json.customer_email }})\n*Urgency:* {{ $json.urgency.toUpperCase() }}\n*Sentiment:* {{ $json.sentiment }}\n*Summary:* {{ $json.summary }}",
+        "otherOptions": {}
+      },
+      "id": "01707253-3fdd-4150-b45c-8d38671a6819",
+      "name": "Slack - General Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [-1792, 656],
+      "webhookId": "__SET_WEBHOOK_ID__",
+      "credentials": { "slackApi": { "id": "__SET_YOUR_SLACK_CREDENTIAL_ID__", "name": "Slack account" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "=={{ $('Set Output Fields').item.json.customer_email }}",
+        "subject": "==[{{ $('Set Output Fields').item.json.ticket_id }}] We received your support request",
+        "message": "==<p>Dear {{ $('Set Output Fields').item.json.customer_name }},</p><p>{{ $('Set Output Fields').item.json.auto_response }}</p><br/><p><b>Ticket ID:</b> {{ $('Set Output Fields').item.json.ticket_id }}<br/><b>Category:</b> {{ $('Set Output Fields').item.json.category }}<br/><b>Priority:</b> {{ $('Set Output Fields').item.json.urgency }}<br/><b>Department:</b> {{ $('Set Output Fields').item.json.department }}</p><p>Best regards,<br/>Support Team</p>",
+        "options": {}
+      },
+      "id": "e1fbf74e-90fb-4cc5-b653-d765e778fa2f",
+      "name": "Email - Billing Response",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-1552, 48],
+      "webhookId": "__SET_WEBHOOK_ID__",
+      "credentials": { "gmailOAuth2": { "id": "__SET_YOUR_GMAIL_CREDENTIAL_ID__", "name": "Gmail account" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "=={{ $('Set Output Fields').item.json.customer_email }}",
+        "subject": "==[{{ $('Set Output Fields').item.json.ticket_id }}] We received your support request",
+        "message": "==<p>Dear {{ $('Set Output Fields').item.json.customer_name }},</p><p>{{ $('Set Output Fields').item.json.auto_response }}</p><br/><p><b>Ticket ID:</b> {{ $('Set Output Fields').item.json.ticket_id }}<br/><b>Category:</b> {{ $('Set Output Fields').item.json.category }}<br/><b>Priority:</b> {{ $('Set Output Fields').item.json.urgency }}<br/><b>Department:</b> {{ $('Set Output Fields').item.json.department }}</p><p>Best regards,<br/>Support Team</p>",
+        "options": {}
+      },
+      "id": "f5a6eae0-67bb-47ce-b91d-cdbc4de356ea",
+      "name": "Email - Tech Response",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-1552, 256],
+      "webhookId": "__SET_WEBHOOK_ID__",
+      "credentials": { "gmailOAuth2": { "id": "__SET_YOUR_GMAIL_CREDENTIAL_ID__", "name": "Gmail account" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "=={{ $('Set Output Fields').item.json.customer_email }}",
+        "subject": "==[{{ $('Set Output Fields').item.json.ticket_id }}] We received your support request",
+        "message": "==<p>Dear {{ $('Set Output Fields').item.json.customer_name }},</p><p>{{ $('Set Output Fields').item.json.auto_response }}</p><br/><p><b>Ticket ID:</b> {{ $('Set Output Fields').item.json.ticket_id }}<br/><b>Category:</b> {{ $('Set Output Fields').item.json.category }}<br/><b>Priority:</b> {{ $('Set Output Fields').item.json.urgency }}<br/><b>Department:</b> {{ $('Set Output Fields').item.json.department }}</p><p>Best regards,<br/>Support Team</p>",
+        "options": {}
+      },
+      "id": "e1ea8aba-b5d2-485e-aa77-c95ccc8f9362",
+      "name": "Email - Feature Response",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-1552, 448],
+      "webhookId": "__SET_WEBHOOK_ID__",
+      "credentials": { "gmailOAuth2": { "id": "__SET_YOUR_GMAIL_CREDENTIAL_ID__", "name": "Gmail account" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "=={{ $('Set Output Fields').item.json.customer_email }}",
+        "subject": "==[{{ $('Set Output Fields').item.json.ticket_id }}] We received your support request",
+        "message": "==<p>Dear {{ $('Set Output Fields').item.json.customer_name }},</p><p>{{ $('Set Output Fields').item.json.auto_response }}</p><br/><p><b>Ticket ID:</b> {{ $('Set Output Fields').item.json.ticket_id }}<br/><b>Category:</b> {{ $('Set Output Fields').item.json.category }}<br/><b>Priority:</b> {{ $('Set Output Fields').item.json.urgency }}<br/><b>Department:</b> {{ $('Set Output Fields').item.json.department }}</p><p>Best regards,<br/>Support Team</p>",
+        "options": {}
+      },
+      "id": "c4ddc4b3-ab7e-4e16-98ee-9eca4948518d",
+      "name": "Email - General Response",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-1552, 656],
+      "webhookId": "__SET_WEBHOOK_ID__",
+      "credentials": { "gmailOAuth2": { "id": "__SET_YOUR_GMAIL_CREDENTIAL_ID__", "name": "Gmail account" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', ticket_id: $json.ticket_id, classification: { category: $json.category, sentiment: $json.sentiment, urgency: $json.urgency, department: $json.department }, response_status: $json.response_status, created_at: $json.created_at }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "a98ebbe8-3b3c-4d5c-9244-cfc15eb38f1b",
+      "name": "Respond - Billing Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-1312, 48]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', ticket_id: $json.ticket_id, classification: { category: $json.category, sentiment: $json.sentiment, urgency: $json.urgency, department: $json.department }, response_status: $json.response_status, created_at: $json.created_at }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "70de5452-a2ad-4d20-b55a-f94ced557885",
+      "name": "Respond - Tech Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-1312, 256]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', ticket_id: $json.ticket_id, classification: { category: $json.category, sentiment: $json.sentiment, urgency: $json.urgency, department: $json.department }, response_status: $json.response_status, created_at: $json.created_at }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "faef2545-1a82-4b64-ad8a-6cd56389b276",
+      "name": "Respond - Feature Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-1312, 448]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', ticket_id: $json.ticket_id, classification: { category: $json.category, sentiment: $json.sentiment, urgency: $json.urgency, department: $json.department }, response_status: $json.response_status, created_at: $json.created_at }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "9b1d004e-d599-4d5a-9997-225d805c7bb6",
+      "name": "Respond - General Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-1312, 656]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]] },
+    "Validate Input": {
+      "main": [
+        [{ "node": "Set Ticket Data", "type": "main", "index": 0 }],
+        [{ "node": "Respond - Invalid Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Ticket Data": { "main": [[{ "node": "LLM - Classify Ticket", "type": "main", "index": 0 }]] },
+    "LLM - Classify Ticket": { "main": [[{ "node": "LLM Response Valid?", "type": "main", "index": 0 }]] },
+    "LLM Response Valid?": {
+      "main": [
+        [{ "node": "Set Classification Fields", "type": "main", "index": 0 }],
+        [{ "node": "Slack - Manual Review Fallback", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack - Manual Review Fallback": { "main": [[{ "node": "Respond - Manual Review", "type": "main", "index": 0 }]] },
+    "Set Classification Fields": { "main": [[{ "node": "OpenAI - Generate Embedding", "type": "main", "index": 0 }]] },
+    "OpenAI - Generate Embedding": { "main": [[{ "node": "Pinecone - Store Embedding", "type": "main", "index": 0 }]] },
+    "Pinecone - Store Embedding": { "main": [[{ "node": "Pinecone - Query Similar Tickets", "type": "main", "index": 0 }]] },
+    "Pinecone - Query Similar Tickets": { "main": [[{ "node": "LLM - Generate Auto Response", "type": "main", "index": 0 }]] },
+    "LLM - Generate Auto Response": { "main": [[{ "node": "Set Output Fields", "type": "main", "index": 0 }]] },
+    "Set Output Fields": { "main": [[{ "node": "Route by Category", "type": "main", "index": 0 }]] },
+    "Route by Category": {
+      "main": [
+        [{ "node": "Slack - Billing Channel", "type": "main", "index": 0 }],
+        [{ "node": "Slack - Tech Channel", "type": "main", "index": 0 }],
+        [{ "node": "Slack - Feature Channel", "type": "main", "index": 0 }],
+        [{ "node": "Slack - General Channel", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack - Billing Channel": { "main": [[{ "node": "Email - Billing Response", "type": "main", "index": 0 }]] },
+    "Slack - Tech Channel": { "main": [[{ "node": "Email - Tech Response", "type": "main", "index": 0 }]] },
+    "Slack - Feature Channel": { "main": [[{ "node": "Email - Feature Response", "type": "main", "index": 0 }]] },
+    "Slack - General Channel": { "main": [[{ "node": "Email - General Response", "type": "main", "index": 0 }]] },
+    "Email - Billing Response": { "main": [[{ "node": "Respond - Billing Success", "type": "main", "index": 0 }]] },
+    "Email - Tech Response": { "main": [[{ "node": "Respond - Tech Success", "type": "main", "index": 0 }]] },
+    "Email - Feature Response": { "main": [[{ "node": "Respond - Feature Success", "type": "main", "index": 0 }]] },
+    "Email - General Response": { "main": [[{ "node": "Respond - General Success", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

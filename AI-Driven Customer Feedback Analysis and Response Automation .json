@@ -1,0 +1,1041 @@
+{
+  "updatedAt": "2026-07-04T03:07:34.214Z",
+  "createdAt": "2026-07-04T02:09:54.560Z",
+  "id": "hpshRgFBrLQMmUSw",
+  "name": "AI-Driven Customer Feedback Analysis and Response Automation v2",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "feedback-form",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "36c30131-1e17-4171-9fde-a227bdb49634",
+      "name": "Web Form Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2256,
+        48
+      ],
+      "webhookId": "cc44b0b5-826d-4591-99e7-ce625f96c681"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "9c61924c-7dec-4ded-93f1-fcfc81426d07",
+      "name": "Email Trigger (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        -2256,
+        256
+      ],
+      "credentials": {
+        "imap": {
+          "id": "ESnYdSwdvDETzubP",
+          "name": "IMAP account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "survey-response",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "791a93f5-b389-4c54-a86d-c3d889ace61a",
+      "name": "Survey Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2256,
+        448
+      ],
+      "webhookId": "9651b2be-bb05-4fca-8b61-f01e4e97f80e"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst raw = item.json.body || item.json;\nconst source = 'web_form';\n\nconst name = raw.name || raw.customer_name || raw.full_name || 'Unknown';\nconst email = raw.email || raw.customer_email || '';\nconst message = raw.message || raw.feedback || raw.comment || '';\nconst subject = raw.subject || raw.title || 'Web Form Feedback';\n\nif (!email || !message) {\n  throw new Error(`[Web Form] Missing required fields. email=${email}, message=${message}`);\n}\n\nreturn [{\n  json: {\n    source,\n    name,\n    email,\n    subject,\n    message,\n    received_at: new Date().toISOString(),\n    raw_payload: raw\n  }\n}];"
+      },
+      "id": "02c223f5-aa34-41ab-a831-f9285dfc1102",
+      "name": "Normalize Web Form",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1952,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst raw = item.json.body || item.json;\nconst source = 'email';\n\nconst name = raw.from?.name || raw.fromName || raw.name || 'Unknown';\nconst email = raw.from?.address || raw.fromAddress || raw.from || raw.email || '';\nconst subject = raw.subject || 'No Subject';\nconst message = raw.text || raw.message ||\n  raw.html?.replace(/<[^>]+>/g, '') ||\n  raw.textAsHtml?.replace(/<[^>]+>/g, '') || '';\n\nif (!email || !message) {\n  throw new Error(`[Email] Missing required fields. email=${email}, message length=${message.length}`);\n}\n\nreturn [{\n  json: {\n    source,\n    name,\n    email,\n    subject,\n    message: message.substring(0, 3000),\n    received_at: new Date().toISOString(),\n    raw_payload: raw\n  }\n}];"
+      },
+      "id": "2cafe999-c1de-4022-bdf8-32e3681fdc97",
+      "name": "Normalize Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1952,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst raw = item.json.body || item.json;\nconst source = 'survey';\n\nconst name = raw.respondent_name || raw.name || raw.customer_name || 'Survey Respondent';\nconst email = raw.respondent_email || raw.email || '';\nconst subject = `Survey Response - ${raw.survey_name || raw.form_name || 'Customer Survey'}`;\nconst message = raw.feedback || raw.response || raw.message ||\n  (raw.answers ? raw.answers.map(a => `${a.question}: ${a.answer}`).join('\\n') : '') ||\n  JSON.stringify(raw);\n\nif (!email || !message) {\n  throw new Error(`[Survey] Missing required fields. email=${email}, message length=${message.length}`);\n}\n\nreturn [{\n  json: {\n    source,\n    name,\n    email,\n    subject,\n    message: message.substring(0, 3000),\n    received_at: new Date().toISOString(),\n    raw_payload: raw\n  }\n}];"
+      },
+      "id": "ced21e61-3868-4921-97b5-536d12614db0",
+      "name": "Normalize Survey",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1952,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "8ae13ed8-ce58-4c70-8674-8710d480e019",
+      "name": "Merge All Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -1728,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this customer feedback:\nSource: {{ $json.source }}\nCustomer: {{ $json.name }}\nSubject: {{ $json.subject }}\nMessage: {{ $json.message }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an expert customer feedback analyst. Analyze the feedback and return structured data with these fields: sentiment (positive|neutral|negative), sentiment_score (a number from -1.0 to 1.0), urgency (low|medium|high|critical), category (billing|technical_support|complaint|refund_request|general_inquiry|feature_request|compliment), key_themes (array of short strings), summary (one or two sentences), requires_human (boolean - true if this needs human escalation), priority_score (1-10)."
+        }
+      },
+      "id": "93ab30e6-4bc4-48c0-9724-0e25cb3d8a07",
+      "name": "AI Agent - Sentiment Analysis",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -1456,
+        176
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b:free",
+        "options": {}
+      },
+      "id": "8ff42c11-7611-4975-b16b-8739862adac0",
+      "name": "OpenRouter Chat Model - Analysis",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        400
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "LcWp0yDSkJrKEEP0",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"sentiment\": \"positive\",\n  \"sentiment_score\": 0.0,\n  \"urgency\": \"medium\",\n  \"category\": \"general_inquiry\",\n  \"key_themes\": [\"theme1\", \"theme2\"],\n  \"summary\": \"Brief summary of the feedback\",\n  \"requires_human\": false,\n  \"priority_score\": 5\n}"
+      },
+      "id": "4ef2d7e9-0b78-47a3-812c-8c3a508663ec",
+      "name": "Structured Output Parser - Analysis",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -1280,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const analysisRaw = $input.first().json;\nconst prevData = $('Merge All Sources').item.json;\n\nlet analysis;\n\nif (analysisRaw.output && typeof analysisRaw.output === 'object' && !Array.isArray(analysisRaw.output)) {\n  analysis = analysisRaw.output;\n} else {\n  let analysisText = analysisRaw.output || analysisRaw.text || '';\n  if (!analysisText) {\n    throw new Error('Empty AI response: ' + JSON.stringify(analysisRaw));\n  }\n  const cleaned = analysisText.replace(/```json/gi, '').replace(/```/gi, '').trim();\n  try {\n    analysis = JSON.parse(cleaned);\n  } catch (e) {\n    const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n    if (match) {\n      analysis = JSON.parse(match[0]);\n    } else {\n      throw new Error('No valid JSON found: ' + cleaned);\n    }\n  }\n}\n\nconst sentiment = analysis.sentiment || 'neutral';\nconst urgency = analysis.urgency || 'medium';\nconst priority_score = analysis.priority_score || 5;\nconst requires_human = analysis.requires_human ?? false;\nconst category = analysis.category || 'general_inquiry';\n\nconst should_escalate = requires_human === true ||\n  (priority_score >= 7 && sentiment === 'negative') ||\n  urgency === 'critical';\n\n// PATTERN: Detailed execution logging — log every decision\nconsole.log(JSON.stringify({\n  event: 'analysis_complete',\n  timestamp: new Date().toISOString(),\n  customer_email: prevData.email,\n  source: prevData.source,\n  sentiment,\n  urgency,\n  category,\n  priority_score,\n  should_escalate,\n  requires_human\n}));\n\nreturn [{\n  json: {\n    ...prevData,\n    analysis: {\n      sentiment,\n      sentiment_score: analysis.sentiment_score ?? 0,\n      urgency,\n      category,\n      key_themes: analysis.key_themes || [],\n      summary: analysis.summary || '',\n      requires_human,\n      priority_score,\n      should_escalate\n    },\n    analysis_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "d0c242d1-a903-4de1-ab38-331e8c0947d7",
+      "name": "Parse AI Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prevData = $('Merge All Sources').item.json;\n\n// PATTERN: Log fallback usage — mentor said fallback failures are unlogged\nconsole.error(JSON.stringify({\n  event: 'analysis_fallback_triggered',\n  timestamp: new Date().toISOString(),\n  customer_email: prevData.email,\n  source: prevData.source,\n  reason: 'AI Agent failed — using safe defaults'\n}));\n\nreturn [{\n  json: {\n    ...prevData,\n    analysis: {\n      sentiment: 'neutral',\n      sentiment_score: 0,\n      urgency: 'high',\n      category: 'general_inquiry',\n      key_themes: ['analysis_failed'],\n      summary: 'AI analysis failed — requires manual review',\n      requires_human: true,\n      priority_score: 8,\n      should_escalate: true\n    },\n    analysis_timestamp: new Date().toISOString(),\n    analysis_error: true\n  }\n}];"
+      },
+      "id": "90dddb66-b38f-4eb3-8acc-4c5faa9beec7",
+      "name": "Analysis Fallback Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ $json.analysis.should_escalate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "41221c50-e9f7-46a0-a3aa-1f42358192d5",
+      "name": "Route by Priority",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-billing",
+              "leftValue": "={{ $json.analysis.category }}",
+              "rightValue": "billing",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-refund",
+              "leftValue": "={{ $json.analysis.category }}",
+              "rightValue": "refund_request",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "5b85bf24-6477-4846-b674-25788f816ded",
+      "name": "Route by Category",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BA3FU335G",
+          "mode": "list",
+          "cachedResultName": "customer-escalationss"
+        },
+        "text": "=💳 *BILLING/REFUND ESCALATION*\n\n*Customer:* {{ $json.name }} ({{ $json.email }})\n*Source:* {{ $json.source }}\n*Received:* {{ $json.received_at }}\n*Subject:* {{ $json.subject }}\n\n*AI Analysis:*\n• Sentiment: {{ $json.analysis.sentiment }} (score: {{ $json.analysis.sentiment_score }})\n• Urgency: {{ $json.analysis.urgency }}\n• Category: {{ $json.analysis.category }}\n• Priority Score: {{ $json.analysis.priority_score }}/10\n• Key Themes: {{ $json.analysis.key_themes.join(', ') }}\n\n*Summary:* {{ $json.analysis.summary }}\n\n*Original Message:*\n```{{ $json.message.substring(0, 500) }}{{ $json.message.length > 500 ? '...' : '' }}```\n\n💰 BILLING TEAM: Please review and respond within 1 hour.",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "581489f8-54ee-4299-9f44-d86164d5dbb1",
+      "name": "Slack - Billing Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        -144
+      ],
+      "webhookId": "1532f5db-f57b-42a5-b3a5-676bca7dd2c5",
+      "credentials": {
+        "slackApi": {
+          "id": "SRqH39jb0EHmHw9m",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BA3FU335G",
+          "mode": "list",
+          "cachedResultName": "customer-escalationss"
+        },
+        "text": "=🚨 *HIGH PRIORITY FEEDBACK ESCALATION*\n\n*Customer:* {{ $json.name }} ({{ $json.email }})\n*Source:* {{ $json.source }}\n*Received:* {{ $json.received_at }}\n*Subject:* {{ $json.subject }}\n\n*AI Analysis:*\n• Sentiment: {{ $json.analysis.sentiment }} (score: {{ $json.analysis.sentiment_score }})\n• Urgency: {{ $json.analysis.urgency }}\n• Category: {{ $json.analysis.category }}\n• Priority Score: {{ $json.analysis.priority_score }}/10\n• Key Themes: {{ $json.analysis.key_themes.join(', ') }}\n\n*Summary:* {{ $json.analysis.summary }}\n\n*Original Message:*\n```{{ $json.message.substring(0, 500) }}{{ $json.message.length > 500 ? '...' : '' }}```\n\n⚡ Action Required: Please review and respond within 2 hours.",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "7adc79cb-12b2-4bc2-a1e8-5a4188ae44df",
+      "name": "Slack Escalation Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        80
+      ],
+      "webhookId": "827bc068-4207-4c4e-944a-86d40b2219f4",
+      "credentials": {
+        "slackApi": {
+          "id": "SRqH39jb0EHmHw9m",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Write a response email for:\nCustomer Name: {{ $json.name }}\nSentiment: {{ $json.analysis.sentiment }}\nCategory: {{ $json.analysis.category }}\nUrgency: {{ $json.analysis.urgency }}\nKey Themes: {{ $json.analysis.key_themes.join(', ') }}\nSummary: {{ $json.analysis.summary }}\nOriginal Message: {{ $json.message }}",
+        "options": {
+          "systemMessage": "You are a professional customer success manager writing empathetic, personalized customer response emails. Write ONLY the email body. Start with a warm greeting using the customer's first name. Keep it 3-4 paragraphs max. Sign off as The Customer Success Team."
+        }
+      },
+      "id": "3939b0c2-6e0e-4c31-8e7b-5caa08860bdd",
+      "name": "AI Agent - Draft Response",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -640,
+        560
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-3.1-8b-instruct:free",
+        "options": {}
+      },
+      "id": "a9961988-4a6f-41d1-b995-49282314409d",
+      "name": "OpenRouter Chat Model - Draft",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -704,
+        768
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "LcWp0yDSkJrKEEP0",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const draftRaw = $input.first().json;\nconst feedbackData = $('Route by Priority').item.json;\n\nlet draftText = draftRaw.output || draftRaw.text || '';\n\nif (!draftText || draftText.trim().length < 20) {\n  draftText = `Dear ${feedbackData.name},\\n\\nThank you for reaching out to us. We have received your feedback and our team will respond to you within 24 hours.\\n\\nBest regards,\\nThe Customer Success Team`;\n}\n\n// PATTERN: Log draft generation\nconsole.log(JSON.stringify({\n  event: 'draft_generated',\n  timestamp: new Date().toISOString(),\n  customer_email: feedbackData.email,\n  draft_length: draftText.trim().length\n}));\n\nreturn [{\n  json: {\n    ...feedbackData,\n    response_draft: draftText.trim(),\n    response_subject: `Re: ${feedbackData.subject}`,\n    draft_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "5f5a25fa-0982-4959-906b-f1f9ad349130",
+      "name": "Parse Draft Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const feedbackData = $('Route by Priority').item.json;\n\n// PATTERN: Log fallback usage\nconsole.error(JSON.stringify({\n  event: 'draft_fallback_triggered',\n  timestamp: new Date().toISOString(),\n  customer_email: feedbackData.email,\n  reason: 'AI Draft Agent failed — using generic template'\n}));\n\nconst fallbackDraft = `Dear ${feedbackData.name},\\n\\nThank you for taking the time to share your feedback with us. We truly value your input and want to ensure you have the best possible experience.\\n\\nOur team has received your message and will review it carefully. You can expect a detailed response from us within 24 business hours.\\n\\nIf your matter is urgent, please don't hesitate to reply to this email directly.\\n\\nWarm regards,\\nThe Customer Success Team`;\n\nreturn [{\n  json: {\n    ...feedbackData,\n    response_draft: fallbackDraft,\n    response_subject: `Re: ${feedbackData.subject}`,\n    draft_timestamp: new Date().toISOString(),\n    draft_error: true\n  }\n}];"
+      },
+      "id": "234b00ff-43f3-42da-9b95-ec0a3e20cff1",
+      "name": "Draft Fallback Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "devjanipooja9@gmail.com",
+        "toEmail": "={{ $json.email }}",
+        "subject": "={{ $json.response_subject }}",
+        "text": "={{ $json.response_draft }}",
+        "options": {}
+      },
+      "id": "bf466fa7-589a-4e57-b740-5a564f423d4e",
+      "name": "Send Auto Response Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        400
+      ],
+      "webhookId": "bf48eda3-8651-478f-a1fb-0efaf4247b6e",
+      "credentials": {
+        "smtp": {
+          "id": "le5iD8di2X4VaMLs",
+          "name": "SMTP account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const feedbackData = $input.first().json;\nconst retryCount = feedbackData._retry_count || 0;\n\nif (retryCount >= 3) {\n  // PATTERN: Log retry exhaustion\n  console.error(JSON.stringify({\n    event: 'retry_exhausted',\n    timestamp: new Date().toISOString(),\n    customer_email: feedbackData.email,\n    total_retries: retryCount,\n    final_status: 'failed_permanent'\n  }));\n\n  return [{\n    json: {\n      ...feedbackData,\n      send_status: 'failed_permanent',\n      retry_exhausted: true,\n      final_retry_count: retryCount\n    }\n  }];\n}\n\n// PATTERN: Log each retry attempt\nconsole.log(JSON.stringify({\n  event: 'retry_attempt',\n  timestamp: new Date().toISOString(),\n  customer_email: feedbackData.email,\n  retry_number: retryCount + 1,\n  wait_seconds: Math.pow(2, retryCount) * 5\n}));\n\nreturn [{\n  json: {\n    ...feedbackData,\n    _retry_count: retryCount + 1,\n    wait_seconds: Math.pow(2, retryCount) * 5,\n    send_status: 'retrying',\n    retry_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "1a579d55-b60f-4d5b-ae15-d3d6c70133b8",
+      "name": "Increment Retry Count",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.wait_seconds }}"
+      },
+      "id": "53ed2841-ade1-46bc-a76a-fad503dbef79",
+      "name": "Wait Before Retry",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        368,
+        208
+      ],
+      "webhookId": "db4930c1-e679-43a2-9e64-a02db4d8982c"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-retry",
+              "leftValue": "={{ $json.retry_exhausted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3e6602c6-6469-4bc3-aa1e-55d7498a8ed6",
+      "name": "Should Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        368,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst name = data.name || 'Unknown';\nconst nameParts = name.trim().split(' ');\nconst firstname = nameParts[0] || name;\nconst lastname = nameParts.slice(1).join(' ') || '';\n\nconst hubspotPayload = {\n  contact: {\n    email: data.email || '',\n    firstname,\n    lastname,\n    feedback_source: data.source || '',\n    feedback_sentiment: data.analysis?.sentiment || '',\n    feedback_category: data.analysis?.category || '',\n    feedback_urgency: data.analysis?.urgency || '',\n    last_feedback_date: data.received_at || ''\n  },\n  note: {\n    subject: `Feedback: ${data.subject || ''}`,\n    body: `SOURCE: ${data.source}\\nSENTIMENT: ${data.analysis?.sentiment} (${data.analysis?.sentiment_score})\\nURGENCY: ${data.analysis?.urgency}\\nCATEGORY: ${data.analysis?.category}\\nPRIORITY: ${data.analysis?.priority_score}/10\\nTHEMES: ${(data.analysis?.key_themes || []).join(', ')}\\nSUMMARY: ${data.analysis?.summary}\\n\\nORIGINAL:\\n${data.message}\\n\\nRESPONSE STATUS: ${data.send_status || (data.analysis?.should_escalate ? 'escalated_to_human' : 'auto_sent')}\\nANALYSIS ERROR: ${data.analysis_error || false}\\nDRAFT ERROR: ${data.draft_error || false}\\nRETRY EXHAUSTED: ${data.retry_exhausted || false}`,\n    timestamp: Date.now()\n  }\n};\n\n// PATTERN: Log CRM payload build\nconsole.log(JSON.stringify({\n  event: 'crm_payload_built',\n  timestamp: new Date().toISOString(),\n  customer_email: data.email,\n  category: data.analysis?.category,\n  should_escalate: data.analysis?.should_escalate\n}));\n\nreturn [{ json: { ...data, hubspot_payload: hubspotPayload } }];"
+      },
+      "id": "a010e2e0-35bc-4932-a4dc-dd162e90f701",
+      "name": "Build CRM Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "email": "={{ $json.hubspot_payload.contact.email }}",
+        "additionalFields": {
+          "firstName": "={{ $json.hubspot_payload.contact.firstname }}",
+          "lastName": "={{ $json.hubspot_payload.contact.lastname }}"
+        },
+        "options": {}
+      },
+      "id": "87c0a5f5-508c-4b18-8c74-04d198b82dab",
+      "name": "HubSpot Upsert Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [
+        384,
+        80
+      ],
+      "credentials": {
+        "hubspotApi": {
+          "id": "5p7roTr7ONNIonKR",
+          "name": "HubSpot account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "resource": "engagement",
+        "type": "NOTE",
+        "additionalFields": {
+          "associations": {
+            "contactIds": [
+              "={{ $('HubSpot Upsert Contact').item.json.id }}"
+            ]
+          }
+        }
+      },
+      "id": "15fc8095-3643-4ee5-8ca6-41327e0137b0",
+      "name": "HubSpot Add Note",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [
+        624,
+        80
+      ],
+      "credentials": {
+        "hubspotApi": {
+          "id": "5p7roTr7ONNIonKR",
+          "name": "HubSpot account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\n// PATTERN: Comprehensive final log — ALL states covered\nconst logEntry = {\n  timestamp: new Date().toISOString(),\n  customer_email: data.email,\n  customer_name: data.name,\n  source: data.source,\n  sentiment: data.analysis?.sentiment,\n  urgency: data.analysis?.urgency,\n  category: data.analysis?.category,\n  priority_score: data.analysis?.priority_score,\n  should_escalate: data.analysis?.should_escalate,\n  requires_human: data.analysis?.requires_human,\n  send_status: data.send_status || (data.analysis?.should_escalate ? 'escalated' : 'auto_sent'),\n  analysis_error: data.analysis_error || false,\n  draft_error: data.draft_error || false,\n  retry_exhausted: data.retry_exhausted || false,\n  final_retry_count: data.final_retry_count || 0,\n  hubspot_updated: true,\n  workflow_version: 'v2_mentor_patterns_applied'\n};\n\nconsole.log('WORKFLOW COMPLETE:', JSON.stringify(logEntry, null, 2));\n\nreturn [{ json: { status: 'complete', log: logEntry } }];"
+      },
+      "id": "3b7407d7-cb53-46cb-a17e-f0ea1e849357",
+      "name": "Log Final Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"received\", \"message\": \"Feedback received and being processed\" }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "6bc8d66a-4a55-4952-870c-2df598f04fbe",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -1952,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [
+        -512,
+        320
+      ],
+      "id": "540171e6-3062-40bc-874e-b7967e8e3252",
+      "name": "IMAP Email Trigger",
+      "credentials": {
+        "imap": {
+          "id": "ESnYdSwdvDETzubP",
+          "name": "IMAP account 2"
+        }
+      },
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "connections": {
+    "Web Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Web Form",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Trigger (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Survey Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Survey",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Web Form": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Email": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Normalize Survey": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge All Sources": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analysis Fallback Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model - Analysis": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Sentiment Analysis",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser - Analysis": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent - Sentiment Analysis",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Route by Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analysis Fallback Handler": {
+      "main": [
+        [
+          {
+            "node": "Route by Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Priority": {
+      "main": [
+        [
+          {
+            "node": "Route by Category",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent - Draft Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Category": {
+      "main": [
+        [
+          {
+            "node": "Slack - Billing Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack Escalation Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build CRM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack - Billing Alert": {
+      "main": [
+        [
+          {
+            "node": "Build CRM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build CRM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Escalation Alert": {
+      "main": [
+        [
+          {
+            "node": "Build CRM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build CRM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Draft Response": {
+      "main": [
+        [
+          {
+            "node": "Parse Draft Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft Fallback Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model - Draft": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Draft Response",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Draft Response": {
+      "main": [
+        [
+          {
+            "node": "Send Auto Response Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Fallback Handler": {
+      "main": [
+        [
+          {
+            "node": "Send Auto Response Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Auto Response Email": {
+      "main": [
+        [
+          {
+            "node": "Build CRM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Increment Retry Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Retry Count": {
+      "main": [
+        [
+          {
+            "node": "Should Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Retry?": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build CRM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retry": {
+      "main": [
+        [
+          {
+            "node": "Send Auto Response Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CRM Payload": {
+      "main": [
+        [
+          {
+            "node": "HubSpot Upsert Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot Upsert Contact": {
+      "main": [
+        [
+          {
+            "node": "HubSpot Add Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HubSpot Add Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot Add Note": {
+      "main": [
+        [
+          {
+            "node": "Log Final Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Final Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IMAP Email Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build CRM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build CRM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:Email Trigger (IMAP)": {},
+    "node:IMAP Email Trigger": {
+      "lastMessageUid": 1808
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "20ac1838-583b-48bd-abba-385035deb799",
+  "activeVersionId": null,
+  "versionCounter": 31,
+  "triggerCount": 4,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-07-04T02:09:54.594Z",
+      "createdAt": "2026-07-04T02:09:54.594Z",
+      "role": "workflow:owner",
+      "workflowId": "hpshRgFBrLQMmUSw",
+      "projectId": "zX0WzwZW2Dy2oOUW",
+      "project": {
+        "updatedAt": "2026-06-06T23:06:25.183Z",
+        "createdAt": "2026-06-06T22:59:00.083Z",
+        "id": "zX0WzwZW2Dy2oOUW",
+        "name": "Pooja Kumari <pujalohana1@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "4eb80c49-68d8-4de6-9345-3e101940fd5a"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version 20ac1838",
+    "description": ""
+  }
+}
